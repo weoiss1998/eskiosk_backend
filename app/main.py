@@ -121,7 +121,7 @@ def checkout_chart(q: Annotated[list[schemas.ProductBuyInfo] | None, Query()] = 
             raise HTTPException(status_code=404, detail="Product not found")
     #Create entry and update stock
     for product in q:
-        schema_entry=schemas.SalesEntry(user_id=product.user_id, product_id=product.id, price=product.price, quantity=product.quantity)
+        schema_entry=schemas.SalesEntryCreate(user_id=product.user_id, product_id=product.id, price=product.price, quantity=product.quantity)
         crud.create_sales_entry(db, schema_entry)
         crud.update_stock(db, product_id=product.id, quantity=-product.quantity)
     return query_items

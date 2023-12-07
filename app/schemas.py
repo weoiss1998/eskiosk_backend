@@ -43,6 +43,15 @@ class SalesEntry(SalesBase):
     class Config:
         orm_mode = True
 
+class SalesEntryCreate(BaseModel):
+    user_id: int
+    product_id: int
+    price: float
+    quantity: int
+
+    class Config:
+        orm_mode = True
+
 
 class UserBase(BaseModel):
     email: str

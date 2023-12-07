@@ -33,7 +33,7 @@ def create_product(db: Session, product: schemas.ProductCreate):
     db.refresh(db_product)
     return db_product
 
-def create_sales_entry(db: Session, entry: schemas.SalesEntry):
+def create_sales_entry(db: Session, entry: schemas.SalesEntryCreate):
     db_entry = models.SalesEntry(user_id=entry.user_id, product_id=entry.product_id, price=entry.price, quantity=entry.quantity)
     db.add(db_entry)
     db.commit()
