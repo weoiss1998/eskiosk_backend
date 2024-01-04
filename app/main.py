@@ -4,6 +4,10 @@ from sqlalchemy.orm import Session
 from typing import Annotated
 from . import crud, models, schemas
 from .database import SessionLocal, engine
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import json
 
 origins = [
     "http://localhost",
@@ -30,6 +34,10 @@ def get_db():
     finally:
         db.close()
 
+class Item(BaseModel):
+    message: str
+    token: str
+
 
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -38,6 +46,23 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
     return crud.create_user(db=db, user=user)
 
+@app.post("/auth/", response_model=schemas.UserCheck)
+def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user.hashed_password != user.hash_pw+"notreallyhashed":
+        raise HTTPException(status_code=400, detail="Password wrong!")
+    item = Item(message="success",token="1351564164")
+    json_compatible_item_data = jsonable_encoder(item)
+    return JSONResponse(content=json_compatible_item_data)
+
+
+@app.post("/check-account/", response_model=schemas.User)
+def get_user_by_mail(user: schemas.User, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+    
 
 @app.get("/users/", response_model=list[schemas.User])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

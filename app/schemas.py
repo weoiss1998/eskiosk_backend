@@ -58,12 +58,18 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str
+    hash_pw: str
 
 
 class User(UserBase):
     id: int
     is_active: bool
+
+    class Config:
+        orm_mode = True
+
+class UserCheck(UserBase):
+    hash_pw: str
 
     class Config:
         orm_mode = True
