@@ -25,6 +25,52 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
 def get_sales_entries(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.SalesEntry).offset(skip).limit(limit).all()
 
+def delete_user(db: Session, user_id: int):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user==None:
+        return None
+    db.delete(db_user)
+    db.commit()
+    return db_user
+
+def delete_product(db: Session, product_id: int):
+    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if db_product==None:
+        return None
+    db.delete(db_product)
+    db.commit()
+    return db_product
+
+def delete_sales_entry(db: Session, entry_id: int):
+    db_entry = db.query(models.SalesEntry).filter(models.SalesEntry.id == entry_id).first()
+    if db_entry==None:
+        return None
+    db.delete(db_entry)
+    db.commit()
+    return db_entry
+
+def delete_all_users(db: Session):
+    db.query(models.User).delete()
+    db.commit()
+    return True
+
+def delete_all_products(db: Session):
+    db.query(models.Product).delete()
+    db.commit()
+    return True
+
+def delete_all_sales_entries(db: Session):
+    db.query(models.SalesEntry).delete()
+    db.commit()
+    return True
+
+def delete_user_by_email(db: Session, email: str):
+    db_user = db.query(models.User).filter(models.User.email == email).first()
+    if db_user==None:
+        return None
+    db.delete(db_user)
+    db.commit()
+    return db_user
 
 def create_user(db: Session, user: schemas.UserCreate):
     hashed_password = hasher.hash(user.hash_pw)

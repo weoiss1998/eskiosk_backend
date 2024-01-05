@@ -3,5 +3,6 @@ fastapi==0.89.1
 ormar==0.12.1
 psycopg2-binary==2.9.5
 uvicorn==0.20.0
-fastapi-login==0.4.1
 argon2-cffi==21.1.0
+fastapi_utils==0.2.0
+

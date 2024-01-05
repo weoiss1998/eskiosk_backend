@@ -2,16 +2,20 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Annotated
-from . import crud, models, schemas
+from . import crud, models, schemas, mail
 from .database import SessionLocal, engine
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import random
+from datetime import datetime
 
 origins = [
     "http://localhost",
     "http://localhost:8080",
 ]
+
+temp_cred_list = list()
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -39,22 +43,62 @@ class Item(BaseModel):
 
 class VerifyMail(BaseModel):
     email: str
-    auth_code: int
+    auth_code: str
 
+class AuthCode(BaseModel):
+    user: schemas.UserCreate
+    auth_code: int
+    timestamp: int
+
+def checkAuthCode(check_user: VerifyMail, db: Session = Depends(get_db)):
+    for entry in temp_cred_list:
+        if entry.user.email==check_user.email:
+            if entry.auth_code==int(check_user.auth_code):
+                curr_dt = datetime.now()
+                timestamp = int(round(curr_dt.timestamp()))
+                if timestamp-entry.timestamp<300:
+                    return crud.create_user(db=db, user=entry.user)
+                else:
+                    temp_cred_list.remove(entry)
+                    return False
+    return False
+
+def checkExpiry():
+    curr_dt = datetime.now()
+    timestamp = int(round(curr_dt.timestamp()))
+    for entry in temp_cred_list:
+        if timestamp-entry.timestamp>300:
+            temp_cred_list.remove(entry)
 
 @app.post("/create/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+    checkExpiry()
+    curr_dt = datetime.now()
+    timestamp = int(round(curr_dt.timestamp()))
+    generatedCode = random.randint(100000, 999999)
+    entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp)
+    temp_cred_list.append(entry)
+    print(generatedCode)
+    #mail.send_auth_code(user.email, generatedCode)
+    item = Item(message="success",token="0")
+    json_compatible_item_data = jsonable_encoder(item)
+    return JSONResponse(content=json_compatible_item_data)
 
 @app.post("/verify/", response_model=VerifyMail)
 def verify_user(user: VerifyMail, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user is None:
+    db_user = checkAuthCode(user, db)
+    checkExpiry()
+    if db_user==False:
+        raise HTTPException(status_code=400, detail="Auth Code wrong or expired!")
+    db_user_test = crud.get_user_by_email(db, email=db_user.email)
+    if db_user_test is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
+    item = Item(message="success",token="1")
+    json_compatible_item_data = jsonable_encoder(item)
+    return JSONResponse(content=json_compatible_item_data)
 
 @app.post("/auth/", response_model=schemas.UserCheck)
 def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
@@ -77,8 +121,6 @@ def get_user_by_mail(user: schemas.User, db: Session = Depends(get_db)):
 @app.get("/users/", response_model=list[schemas.User])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = crud.get_users(db, skip=skip, limit=limit)
-    for user in users:
-        print(user.id)
     return users
 
 
@@ -136,7 +178,7 @@ def read_products(q: Annotated[list[str], Query()] = ["foo", "bar"]):
     query_items = {"q": q}
     return query_items"""
 
-@app.post("/chart/products")
+@app.delete("/chart/products")
 def checkout_chart(q: Annotated[list[schemas.ProductBuyInfo] | None, Query()] = None, db: Session = Depends(get_db)):
     query_items = {"q": q}
     users =  crud.get_users(db, skip=0, limit=1024)
@@ -165,3 +207,11 @@ def checkout_chart(q: Annotated[list[schemas.ProductBuyInfo] | None, Query()] = 
         crud.create_sales_entry(db, schema_entry)
         crud.update_stock(db, product_id=product.id, quantity=-product.quantity)
     return query_items
+
+@app.delete("/delete/users/")
+def delete_all_users(db: Session = Depends(get_db)):
+    return crud.delete_all_users(db)
+
+@app.delete("/delete/users/{email}")
+def delete_user_by_email(email: str, db: Session = Depends(get_db)):
+    return crud.delete_user_by_email(db, email)
