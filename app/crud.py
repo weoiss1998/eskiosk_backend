@@ -1,7 +1,15 @@
 from sqlalchemy.orm import Session
-
+import argon2
 from . import models, schemas
 
+hasher = argon2.PasswordHasher()
+
+def checkPassword(new_password, hash_pw):
+    try:
+        hasher.verify(hash_pw, new_password)
+        return True
+    except:
+        return False
 
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
@@ -19,8 +27,8 @@ def get_sales_entries(db: Session, skip: int = 0, limit: int = 100):
 
 
 def create_user(db: Session, user: schemas.UserCreate):
-    fake_hashed_password = user.password + "notreallyhashed"
-    db_user = models.User(email=user.email, hashed_password=fake_hashed_password)
+    hashed_password = hasher.hash(user.hash_pw)
+    db_user = models.User(email=user.email, hashed_password=hashed_password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -71,11 +79,3 @@ def update_stock(db: Session, product_id: int, quantity: int):
     db.commit()
     db.refresh(prod)
     return prod
-
-'''def create_user_item(db: Session, item: schemas.ItemCreate, user_id: int):
-    db_item = models.Item(**item.dict(), owner_id=user_id)
-    db.add(db_item)
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-    '''

@@ -7,7 +7,6 @@ from .database import SessionLocal, engine
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import json
 
 origins = [
     "http://localhost",
@@ -38,18 +37,29 @@ class Item(BaseModel):
     message: str
     token: str
 
+class VerifyMail(BaseModel):
+    email: str
+    auth_code: int
 
-@app.post("/users/", response_model=schemas.User)
+
+@app.post("/create/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     return crud.create_user(db=db, user=user)
 
+@app.post("/verify/", response_model=VerifyMail)
+def verify_user(user: VerifyMail, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
 @app.post("/auth/", response_model=schemas.UserCheck)
 def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user.hashed_password != user.hash_pw+"notreallyhashed":
+    if crud.checkPassword(user.hash_pw, db_user.hashed_password)==False:
         raise HTTPException(status_code=400, detail="Password wrong!")
     item = Item(message="success",token="1351564164")
     json_compatible_item_data = jsonable_encoder(item)
@@ -78,14 +88,6 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
-
-'''
-@app.post("/users/{user_id}/items/", response_model=schemas.Item)
-def create_item_for_user(
-    user_id: int, item: schemas.ItemCreate, db: Session = Depends(get_db)
-):
-    return crud.create_user_item(db=db, item=item, user_id=user_id)
-'''
 
 @app.get("/products/", response_model=list[schemas.Product])
 def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
