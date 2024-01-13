@@ -136,9 +136,6 @@ def updatePassword(user: CheckNewPassword, db: Session = Depends(get_db)):
     checkExpiry()
     if db_user==False:
         raise HTTPException(status_code=400, detail="Auth Code wrong or expired!")
-    db_user_test = crud.get_user_by_email(db, email=db_user.email)
-    if db_user_test is None:
-        raise HTTPException(status_code=404, detail="User not found")
     item = Item(message="success",token="1")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
