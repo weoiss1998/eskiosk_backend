@@ -45,19 +45,31 @@ class VerifyMail(BaseModel):
     email: str
     auth_code: str
 
+class CheckNewPassword(BaseModel):
+    email: str
+    auth_code: str
+    new_pw: str
+
 class AuthCode(BaseModel):
     user: schemas.UserCreate
     auth_code: int
     timestamp: int
+    change: str = None
 
-def checkAuthCode(check_user: VerifyMail, db: Session = Depends(get_db)):
+def checkAuthCode(check_user: VerifyMail, db: Session = Depends(get_db), new_pw: str = None):
     for entry in temp_cred_list:
         if entry.user.email==check_user.email:
             if entry.auth_code==int(check_user.auth_code):
                 curr_dt = datetime.now()
                 timestamp = int(round(curr_dt.timestamp()))
                 if timestamp-entry.timestamp<300:
-                    return crud.create_user(db=db, user=entry.user)
+                    if entry.change=="yes":
+                        if new_pw==None:
+                            print("No new password given!")
+                            return False
+                        return crud.update_password(db=db, user_email=entry.user.email, password=new_pw)
+                    else:
+                        return crud.create_user(db=db, user=entry.user)
                 else:
                     temp_cred_list.remove(entry)
                     return False
@@ -79,7 +91,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     curr_dt = datetime.now()
     timestamp = int(round(curr_dt.timestamp()))
     generatedCode = random.randint(100000, 999999)
-    entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp)
+    entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="no")
     temp_cred_list.append(entry)
     print(generatedCode)
     #mail.send_auth_code(user.email, generatedCode)
@@ -87,9 +99,40 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 
+@app.post("/resetPassword/", response_model=schemas.User)
+def resetPassword(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Email does not exist")
+    checkExpiry()
+    curr_dt = datetime.now()
+    timestamp = int(round(curr_dt.timestamp()))
+    generatedCode = random.randint(100000, 999999)
+    entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="yes")
+    temp_cred_list.append(entry)
+    print(generatedCode)
+    #mail.send_reset_code(user.email, generatedCode)
+    item = Item(message="success",token="0")
+    json_compatible_item_data = jsonable_encoder(item)
+    return JSONResponse(content=json_compatible_item_data)
+
 @app.post("/verify/", response_model=VerifyMail)
 def verify_user(user: VerifyMail, db: Session = Depends(get_db)):
     db_user = checkAuthCode(user, db)
+    checkExpiry()
+    if db_user==False:
+        raise HTTPException(status_code=400, detail="Auth Code wrong or expired!")
+    db_user_test = crud.get_user_by_email(db, email=db_user.email)
+    if db_user_test is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    item = Item(message="success",token="1")
+    json_compatible_item_data = jsonable_encoder(item)
+    return JSONResponse(content=json_compatible_item_data)
+
+@app.patch("/updatePassword/", response_model=CheckNewPassword)
+def updatePassword(user: CheckNewPassword, db: Session = Depends(get_db)):
+    dummy_user=VerifyMail(email=user.email, auth_code=user.auth_code)
+    db_user = checkAuthCode(dummy_user, db, user.new_pw)
     checkExpiry()
     if db_user==False:
         raise HTTPException(status_code=400, detail="Auth Code wrong or expired!")

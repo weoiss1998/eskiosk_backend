@@ -104,6 +104,18 @@ def get_product_by_name(db: Session, name: str):
 def get_product(db: Session, product_id: int):
    return db.query(models.Product).filter(models.Product.id == product_id).first() 
 
+def update_password(db: Session, user_email: str, password: str):
+    #prod = db.query(models.Product).filter(models.Product.id==product_id).first()
+    prod = db.query(models.User).filter(models.User.email==user_email).first()
+    if prod==None:
+        return None
+    hashed_password = hasher.hash(password)
+    prod.hashed_password = hashed_password
+    db.add(prod)
+    db.commit()
+    db.refresh(prod)
+    return prod
+
 def update_price(db: Session, product_id: int, price: float):
     #prod = db.query(models.Product).filter(models.Product.id==product_id).first()
     prod = db.query(models.Product).filter(models.Product.id==product_id).first()
