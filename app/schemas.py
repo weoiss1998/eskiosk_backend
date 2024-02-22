@@ -23,8 +23,9 @@ class Product(ProductBase):
 class ProductBuyInfo(BaseModel):
     user_id: int
     id: int
-    price: float
     quantity: int
+    price: float 
+    cost: float
 
     class Config:
         orm_mode = True
@@ -32,13 +33,40 @@ class ProductBuyInfo(BaseModel):
 class SalesBase(BaseModel):
     id: int
 
+class Item(BaseModel):
+    message: str
+    user_id: int
+    is_admin: bool
+    token: str
 
+class VerifyMail(BaseModel):
+    email: str
+    auth_code: str
+
+class CheckNewPassword(BaseModel):
+    email: str
+    auth_code: str
+    new_pw: str
 
 class SalesEntry(SalesBase):
     user_id: int
     product_id: int
     price: float
     quantity: int
+    paid: bool
+    period: str
+
+    class Config:
+        orm_mode = True
+
+class SalesEntryWithProductName(SalesBase):
+    user_id: int
+    product_id: int
+    product_name: str
+    price: float
+    quantity: int
+    paid: bool
+    period: str
 
     class Config:
         orm_mode = True
@@ -48,6 +76,8 @@ class SalesEntryCreate(BaseModel):
     product_id: int
     price: float
     quantity: int
+    paid: bool = False
+    period: str
 
     class Config:
         orm_mode = True
@@ -64,9 +94,18 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: int
     is_active: bool
+    is_admin: bool
+    sales_period: str
+    open_balances: float
 
     class Config:
         orm_mode = True
+
+class UserData(User):
+    name: str
+    last_turnover: float
+    paid: bool
+    actual_turnover: float
 
 class UserCheck(UserBase):
     hash_pw: str
@@ -76,10 +115,21 @@ class UserCheck(UserBase):
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
-    id: Optional[int] = None
+    product_id: Optional[int] = None
     is_active: Optional[bool] = None
     price: Optional[float] = None
     quantity: Optional[int] = None
+    
+    class Config:
+        orm_mode = True
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    user_id: Optional[int] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+    sales_period: Optional[str] = None
+    open_balances: Optional[float] = None
     
     class Config:
         orm_mode = True
