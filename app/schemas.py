@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Annotated, Union
 
 class ProductBase(BaseModel):
     name: str
@@ -11,11 +11,13 @@ class ProductCreate(ProductBase):
     name: str
     price: float | None = 0
     quantity: int | None = 0
+    image: str | None = None
 
 
 class Product(ProductBase):
     id: int
     is_active: bool
+    image: str
 
     class Config:
         orm_mode = True
@@ -37,6 +39,10 @@ class Item(BaseModel):
     message: str
     user_id: int
     is_admin: bool
+    token: str
+
+class Confirm(BaseModel):
+    message: str
     token: str
 
 class VerifyMail(BaseModel):
@@ -61,6 +67,7 @@ class SalesEntry(SalesBase):
 
 class SalesEntryWithProductName(SalesBase):
     user_id: int
+    user_name: str
     product_id: int
     product_name: str
     price: float
@@ -89,10 +96,12 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     hash_pw: str
+    name: str
 
 
 class User(UserBase):
     id: int
+    name: str
     is_active: bool
     is_admin: bool
     sales_period: str

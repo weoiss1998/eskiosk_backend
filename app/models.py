@@ -1,5 +1,5 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, LargeBinary
-from sqlalchemy.orm import relationship
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, LargeBinary, Numeric, Float
+#from sqlalchemy.orm import relationship
 
 from .database import Base
 
@@ -9,12 +9,13 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
+    name = Column(String)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     jwt_token = Column(String)
     is_admin = Column(Boolean, default=False)
     sales_period = Column(String, default="0")
-    open_balances = Column(Float, default=0.0)
+    open_balances = Column(Float, default=0.00)
     #items = relationship("Item", back_populates="owner")
 
 
@@ -26,7 +27,7 @@ class Product(Base):
     is_active = Column(Boolean, default=True)
     price = Column(Float)
     quantity = Column(Integer)
-    picture = Column(LargeBinary, nullable=True)
+    image = Column(String, nullable=True)
     #set_warning = Column(Integer, default=0)
     
     #owner_id = Column(Integer, ForeignKey("users.id"))

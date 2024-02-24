@@ -1,4 +1,5 @@
-from fastapi import Depends, FastAPI, HTTPException, Query
+from decimal import Decimal
+from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Annotated
@@ -69,7 +70,7 @@ def checkExpiry():
         if timestamp-entry.timestamp>300:
             temp_cred_list.remove(entry)
 
-@app.post("/create/", response_model=schemas.User)
+@app.post("/create/", response_model=schemas.UserCreate)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
@@ -82,7 +83,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     temp_cred_list.append(entry)
     print(generatedCode)
     #mail.send_auth_code(user.email, generatedCode)
-    item = schemas.Item(message="success",token="0")
+    item = schemas.Confirm(message="success",token="0")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 
@@ -99,7 +100,7 @@ def resetPassword(user: schemas.UserCreate, db: Session = Depends(get_db)):
     temp_cred_list.append(entry)
     print(generatedCode)
     #mail.send_reset_code(user.email, generatedCode)
-    item = schemas.Item(message="success",token="0")
+    item = schemas.Confirm(message="success",token="0")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 
@@ -112,7 +113,7 @@ def verify_user(user: schemas.VerifyMail, db: Session = Depends(get_db)):
     db_user_test = crud.get_user_by_email(db, email=db_user.email)
     if db_user_test is None:
         raise HTTPException(status_code=404, detail="User not found")
-    item = schemas.Item(message="success",token="1")
+    item = schemas.Confirm(message="success",token="1")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 
@@ -123,7 +124,7 @@ def updatePassword(user: schemas.CheckNewPassword, db: Session = Depends(get_db)
     checkExpiry()
     if db_user==False:
         raise HTTPException(status_code=400, detail="Auth Code wrong or expired!")
-    item = schemas.Item(message="success",token="1")
+    item = schemas.Confirm(message="success",token="1")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 
@@ -150,7 +151,7 @@ def check_token(user_id: int, token: str, db: Session = Depends(get_db)):
 
 
 @app.post("/check-account/", response_model=schemas.User)
-def get_user_by_mail(user: schemas.User, db: Session = Depends(get_db)):
+def get_user_by_mail(user: schemas.UserBase, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -178,9 +179,15 @@ def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 @app.get("/salesEntries/", response_model=list[schemas.SalesEntryWithProductName])
 def read_sales_entries(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     sales_entries = crud.get_sales_entries(db, skip=skip, limit=limit)
+    users = crud.get_users(db, skip=0, limit=1024)
     modifed_entries=list()
     for entry in sales_entries:
-        modifed_entry=schemas.SalesEntryWithProductName(id=entry.id, user_id=entry.user_id, product_id=entry.product_id, product_name=crud.get_product(db, entry.product_id).name, price=entry.price, quantity=entry.quantity, paid=entry.paid, period=entry.period)
+        user_name=""
+        for user in users:
+            if user.id==entry.user_id:
+                user_name=user.name
+                break
+        modifed_entry=schemas.SalesEntryWithProductName(id=entry.id, user_id=entry.user_id, user_name=user_name, product_id=entry.product_id, product_name=crud.get_product(db, entry.product_id).name, price=entry.price, quantity=entry.quantity, paid=entry.paid, period=entry.period)
         modifed_entries.append(modifed_entry)
     if modifed_entries==None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -191,7 +198,7 @@ def read_sales_entries_by_uid(user_id: int, db: Session = Depends(get_db)):
     sales_entries = crud.get_sales_entry_by_user_id(db, user_id=user_id)
     modifed_entries=list()
     for entry in sales_entries:
-        modifed_entry=schemas.SalesEntryWithProductName(id=entry.id, user_id=entry.user_id, product_id=entry.product_id, product_name=crud.get_product(db, entry.product_id).name, price=entry.price, quantity=entry.quantity, paid=entry.paid, period=entry.period)
+        modifed_entry=schemas.SalesEntryWithProductName(id=entry.id, user_id=entry.user_id,user_name="", product_id=entry.product_id, product_name=crud.get_product(db, entry.product_id).name, price=entry.price, quantity=entry.quantity, paid=entry.paid, period=entry.period)
         modifed_entries.append(modifed_entry)
     if modifed_entries==None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -223,7 +230,7 @@ def updateStock(product_id: int, quantity: int, db: Session = Depends(get_db)):
     return db_product
 
 @app.patch("/reducequantity/", response_model=schemas.ProductUpdate)
-def updateStock(product_id: int, quantity: int, db: Session = Depends(get_db)):
+def reduceQuantity(product_id: int, quantity: int, db: Session = Depends(get_db)):
     db_product = crud.get_product(db, product_id=product_id)
     if db_product==None:
         raise HTTPException(status_code=400, detail="Product doesn't exists")

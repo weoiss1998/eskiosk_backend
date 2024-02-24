@@ -1,3 +1,4 @@
+from email.mime import image
 from sqlalchemy.orm import Session
 import argon2
 from . import models, schemas
@@ -87,14 +88,14 @@ def delete_user_by_email(db: Session, email: str):
 
 def create_user(db: Session, user: schemas.UserCreate):
     hashed_password = hasher.hash(user.hash_pw)
-    db_user = models.User(email=user.email, hashed_password=hashed_password)
+    db_user = models.User(email=user.email, hashed_password=hashed_password, name=user.name)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
 def create_product(db: Session, product: schemas.ProductCreate):
-    db_product = models.Product(name=product.name, price=product.price, quantity=product.quantity)
+    db_product = models.Product(name=product.name, price=product.price, quantity=product.quantity, image=product.image)
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
@@ -226,3 +227,4 @@ def update_user_admin(db: Session, user_id: int, status: bool):
     db.commit()
     db.refresh(user)
     return user
+
