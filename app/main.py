@@ -353,3 +353,28 @@ def change_paid(user_id: int, paid: bool, db: Session = Depends(get_db)):
     for entry in sales_entries:
         crud.change_paid(db, entry.id, paid)
     return True
+
+@app.post("/sendMoney/")
+def send_money(user_id: int, email:str, amount: float, db: Session = Depends(get_db)):
+    user = crud.get_user(db, user_id)
+    if user.email==email:
+        raise HTTPException(status_code=400, detail="You cannot send money to yourself")
+    empf = crud.get_user_by_email(db, email)
+    if user==None or empf==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if amount<0.0:
+        raise HTTPException(status_code=400, detail="Amount cannot be smaller than 0")
+    old_amount= crud.get_open_balances(db, user_id)
+    crud.update_open_balances(db, user_id, old_amount+amount)
+    old_amount= crud.get_open_balances(db, empf.id)
+    crud.update_open_balances(db, empf.id, old_amount-amount)
+    return True
+
+@app.post("/addOpenBalances/")
+def add_open_balances(user_id: int, amount: float, db: Session = Depends(get_db)):
+    user = crud.get_user(db, user_id)
+    if user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    old_amount= crud.get_open_balances(db, user_id)
+    crud.update_open_balances(db, user_id, old_amount-amount)
+    return True
