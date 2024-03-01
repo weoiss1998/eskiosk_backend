@@ -3,10 +3,10 @@ from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Annotated
-from . import crud, models, schemas, mail
+from . import crud, models, schemas, mail, backup, database
 from .database import SessionLocal, engine
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import random
 from datetime import datetime
@@ -69,6 +69,33 @@ def checkExpiry():
     for entry in temp_cred_list:
         if timestamp-entry.timestamp>300:
             temp_cred_list.remove(entry)
+
+@app.get("/backup/")
+def backup_db(action: str):
+    backup.backupDB(action=action, date="2024-03-01", dest_db="fastapi_traefik", verbose=True) 
+    return True
+
+@app.get("/createBackup/",responses = {
+        200: {
+            "content": {"application/octet-stream": {}}
+        }
+    },)
+def create_backup():
+    compressedFile = backup.backupDB(action="backup", date=datetime.now(), dest_db="fastapi_traefik", verbose=True, nameOfBackup="") 
+    return FileResponse(path=compressedFile,media_type='application/octet-stream', filename='backup.dump.gz')
+
+@app.post("/restoreBackup/")
+def restore_backup(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if file.content_type != "application/gzip":
+        raise HTTPException(400, detail="Invalid document type")
+    try:
+        file_path = f"./backups/{file.filename}" 
+        with open(file_path, "wb") as f:
+            f.write(file.file.read())
+            backup.backupDB(action="restoreNew", date=datetime.now(), dest_db="fastapi_traefik", verbose=True, nameOfBackup=file.filename)
+        return {"message": "File saved successfully"}
+    except Exception as e:
+        return {"message": e.args}
 
 @app.post("/create/", response_model=schemas.UserCreate)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
