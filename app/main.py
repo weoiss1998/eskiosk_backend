@@ -15,6 +15,7 @@ import os
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, PackageLoader
 from weasyprint import HTML
+from pydantic import Field
 
 # load templates folder to environment (security measure)
 env = Environment(loader=PackageLoader('app', 'templates'))
@@ -24,6 +25,8 @@ origins = [
     "http://localhost",
     "http://localhost:8080",
 ]
+
+TESTING: bool = Field(..., env='TESTING')
 
 temp_cred_list = list()
 
@@ -175,8 +178,13 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     curr_dt = datetime.now()
     timestamp = int(round(curr_dt.timestamp()))
     generatedCode = random.randint(100000, 999999)
+    if TESTING:
+        print(generatedCode)
+        generatedCode = 123456
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="no")
-    temp_cred_list.append(entry)
+    temp_cred_list.append(entry)   
+
+
     print(generatedCode)
     #mail.send_auth_code(user.email, generatedCode)
     item = schemas.Confirm(message="success",token="0")
@@ -192,6 +200,9 @@ def resetPassword(user: schemas.UserCreate, db: Session = Depends(get_db)):
     curr_dt = datetime.now()
     timestamp = int(round(curr_dt.timestamp()))
     generatedCode = random.randint(100000, 999999)
+    if TESTING:
+        print(generatedCode)
+        generatedCode = 123456
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="yes")
     temp_cred_list.append(entry)
     print(generatedCode)
@@ -229,8 +240,11 @@ def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if crud.checkPassword(user.hash_pw, db_user.hashed_password)==False:
         raise HTTPException(status_code=400, detail="Password wrong!")
-    crud.update_user_token(db, db_user.id, "123456789")
-    item = schemas.Item(message="success",user_id=db_user.id, token="123456789", is_admin=db_user.is_admin)
+    token=123456789
+    if TESTING:
+        token=123456789
+    crud.update_user_token(db, db_user.id, token)
+    item = schemas.Item(message="success",user_id=db_user.id, token=token, is_admin=db_user.is_admin)
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 

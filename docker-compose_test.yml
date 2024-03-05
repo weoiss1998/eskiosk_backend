@@ -12,7 +12,7 @@ services:
       - 8000
     environment:
       - DATABASE_URL=postgresql://fastapi_traefik:fastapi_traefik@db:5432/fastapi_traefik
-      - TESTING=False
+      - TESTING=True
     depends_on:
       - db
     labels:
@@ -20,8 +20,6 @@ services:
       - "traefik.http.routers.fastapi.rule=Host(`fastapi.localhost`)"
   db:
     image: postgres:15-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
     expose:
       - 5432
     environment:
@@ -44,5 +42,3 @@ services:
 networks:
   backend:
     name: connect
-volumes:
-  postgres_data:
