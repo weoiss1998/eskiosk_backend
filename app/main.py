@@ -1,4 +1,6 @@
 from decimal import Decimal
+from itertools import product
+from operator import inv
 from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -7,9 +9,23 @@ from . import crud, models, schemas, mail, backup, database
 from .database import SessionLocal, engine
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import random
-from datetime import datetime
+from datetime import date, datetime
+import qrcode
+
+import io
+import os
+
+from fastapi.templating import Jinja2Templates
+
+from jinja2 import Environment, PackageLoader
+from weasyprint import HTML
+
+# load templates folder to environment (security measure)
+env = Environment(loader=PackageLoader('app', 'templates'))
+
 
 origins = [
     "http://localhost",
@@ -30,6 +46,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+templates = Jinja2Templates(directory="/templates")
+
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -43,6 +61,8 @@ class AuthCode(BaseModel):
     auth_code: int
     timestamp: int
     change: str = None
+
+
 
 def checkAuthCode(check_user: schemas.VerifyMail, db: Session = Depends(get_db), new_pw: str = None):
     for entry in temp_cred_list:
@@ -69,6 +89,47 @@ def checkExpiry():
     for entry in temp_cred_list:
         if timestamp-entry.timestamp>300:
             temp_cred_list.remove(entry)
+
+def create_FastApi_Invoice(user_name: str, items: list, admin_name: str, admin_email: str, admin_link:str, total: float):
+    today = datetime.today().strftime("%B %-d, %Y")
+    user_name_without_spaces = user_name.replace(" ", "")
+    invoice_date= datetime.today().strftime("%Y%m%d")
+    invoice_number = user_name_without_spaces+invoice_date
+    this_folder = os.path.dirname(os.path.abspath(__file__))
+    qr_path=""
+    if total>0.0:
+        index_template = env.get_template('invoice.html')   
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=4,
+        )
+        if admin_link[-1]!="/":
+            admin_link = admin_link + "/"
+        total_string = str(total)
+        total_string = total_string.replace(".", ",")
+        admin_link_with_balance = admin_link+total_string 
+        qr.add_data(admin_link_with_balance)
+        qr.make(fit=True)
+        qr_path= 'file://' + os.path.join(this_folder, 'templates', 'qr.png' )
+        img = qr.make_image(fill_color="black", back_color="white")
+        img.save("app/templates/qr.png")
+    else:
+        index_template = env.get_template('credit_invoice.html')
+    picture_path= 'file://' + os.path.join(this_folder, 'templates', 'es_logo_gross.jpg' ) 
+    total_string = "{:.2f}".format(total)
+    output_from_parsed_template = index_template.render(date= today, picture=picture_path,  user_name=user_name, admin_name=admin_name, admin_email=admin_email, items= items, total= total_string, invoice_number= invoice_number, qr_code=qr_path)
+    html = HTML(string=output_from_parsed_template)  
+    rendered_pdf = html.write_pdf()
+    path = "app/invoices/"+user_name+today+".pdf"
+    with open(path, 'wb') as f:
+        f.write(rendered_pdf)
+        f.close()
+    # write the parsed template
+    if total>0.0:
+        os.remove("app/templates/qr.png")
+    return True
 
 @app.get("/backup/")
 def backup_db(action: str):
@@ -160,8 +221,8 @@ def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if crud.checkPassword(user.hash_pw, db_user.hashed_password)==False:
         raise HTTPException(status_code=400, detail="Password wrong!")
-    crud.update_user_token(db, db_user.id, "1351564164")
-    item = schemas.Item(message="success",user_id=db_user.id, token="1351564164", is_admin=db_user.is_admin)
+    crud.update_user_token(db, db_user.id, "123456789")
+    item = schemas.Item(message="success",user_id=db_user.id, token="123456789", is_admin=db_user.is_admin)
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
 
@@ -179,6 +240,10 @@ def check_token(user_id: int, token: str, db: Session = Depends(get_db)):
 
 @app.post("/check-account/", response_model=schemas.User)
 def get_user_by_mail(user: schemas.UserBase, db: Session = Depends(get_db)):
+    check_for_admin_user = crud.get_user_by_email(db, email="admin")
+    if check_for_admin_user is None:
+        user = schemas.UserCreateAdmin(email="admin", hash_pw="admin", name="admin", is_admin=True, is_active=True)
+        crud.create_admin_user(db=db, user=user)
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -358,19 +423,94 @@ def get_user_data(db: Session = Depends(get_db)):
         user_data.append(schemas.UserData(id=user.id, email=user.email, is_active=user.is_active, is_admin=user.is_admin, sales_period=user.sales_period, name=user.name, last_turnover=last_turnover, paid=paid, actual_turnover=actual_turnover, open_balances=user.open_balances))
     return user_data
 
+@app.patch("/changePayPalLink/")
+def set_paypal_link(user_id: int, token: str, link: str, db: Session = Depends(get_db)):
+    user = crud.get_user(db, user_id)
+    if user.jwt_token!=token or user.is_admin==False or user==None:
+        raise HTTPException(status_code=401, detail="Not authorized")
+    crud.set_paypal_link(db, user_id, link)
+    return True
+
 @app.post("/closePeriod/")
-def close_period(db: Session = Depends(get_db)):
+def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
+    admin = crud.get_user(db, admin_id)
+    if admin.jwt_token!=token or admin.is_admin==False:
+        raise HTTPException(status_code=401, detail="Not authorized")
     users = crud.get_users(db, skip=0, limit=1024)
     sales_entries = crud.get_sales_entries(db, skip=0, limit=1024)
+    class Item():
+        name: str
+        price_per_unit: float
+        quantity: int
+        total_price: float
+
     for user in users:
+        list_items = list()
         last_unpaid_turnover = crud.get_open_balances(db, user.id)
         period = int(user.sales_period)
         for entry in sales_entries:
-            if int(entry.period)==period-1 and entry.paid==False:
-                last_unpaid_turnover+=entry.price*float(entry.quantity)
-                entry.paid=True
+            if entry.user_id==user.id:
+                if int(entry.period)<period and entry.paid==False:
+                    last_unpaid_turnover+=entry.price*float(entry.quantity)
+                    entry.paid=True
+                    crud.change_paid(db, entry.id, True)
+                if entry.paid==False:
+                    if len(list_items)==0:
+                        temp = Item()
+                        temp.name=crud.get_product(db, entry.product_id).name
+                        temp.price_per_unit=entry.price
+                        temp.quantity=entry.quantity
+                        temp.total_price=entry.price*float(entry.quantity)
+                        list_items.append(temp)
+                    else:
+                        for item in list_items:
+                            temp_name = crud.get_product(db, entry.product_id).name
+                            print(temp_name)
+                            if item.name==temp_name and item.price_per_unit==entry.price:
+                                item.quantity+=entry.quantity
+                                item.total_price+=entry.price*float(entry.quantity)
+                            else:
+                                temp = Item()
+                                temp.name=temp_name
+                                temp.price_per_unit=entry.price
+                                temp.quantity=entry.quantity
+                                temp.total_price=entry.price*float(entry.quantity)
+                                list_items.append(temp)
+        
+        total_turnover = sum([i.total_price for i in list_items])
+        print(total_turnover)        
         if last_unpaid_turnover!=0.0:
             crud.update_open_balances(db, user.id, last_unpaid_turnover)
+            temp = Item()
+            temp.name="Open Balances"
+            temp.price_per_unit=0.00
+            temp.quantity=1
+            temp.total_price=last_unpaid_turnover
+            list_items.append(temp)
+        user_balance = total_turnover+last_unpaid_turnover
+        if user_balance<=0.0 and total_turnover!=0.0:
+            for entry in sales_entries:
+                if entry.user_id==user.id and entry.paid==False:
+                    crud.change_paid(db, entry.id, True)
+            crud.update_open_balances(db, user.id, user_balance)
+
+        class StringItem():
+            name: str
+            price_per_unit: str
+            quantity: str
+            total_price: str
+        if len(list_items)!=0:
+            string_items = list()
+            for item in list_items:
+                temp = StringItem()
+                temp.name=item.name
+                temp.price_per_unit=str(f"{item.price_per_unit:.2f}")
+                temp.quantity=str(item.quantity)
+                temp.total_price=str(f"{item.total_price:.2f}")    
+                string_items.append(temp) 
+            json_items = jsonable_encoder(string_items)#to be changed
+            print(json_items)
+            create_FastApi_Invoice(user.name, json_items, admin.name, admin.email, admin.paypal_link, user_balance)
         crud.increase_sales_period(db, user.email)
 
 @app.patch("/changePaid/")
@@ -404,4 +544,11 @@ def add_open_balances(user_id: int, amount: float, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="User not found")
     old_amount= crud.get_open_balances(db, user_id)
     crud.update_open_balances(db, user_id, old_amount-amount)
+    return True
+
+
+
+@app.get("/testInvoices/")
+def test_Invoice():
+    create_FastApi_Invoice()
     return True

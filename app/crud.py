@@ -15,6 +15,15 @@ def checkPassword(new_password, hash_pw):
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
 
+def set_paypal_link(db: Session, user_id: int, link: str):
+    user = db.query(models.User).filter(models.User.id==user_id).first()
+    if user==None:
+        return None
+    user.paypal_link = link
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
@@ -93,6 +102,15 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+def create_admin_user(db: Session, user: schemas.User):
+    hashed_password = hasher.hash(user.hash_pw)
+    db_user = models.User(email=user.email, hashed_password=hashed_password, name=user.name, is_admin=True)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
 
 def create_product(db: Session, product: schemas.ProductCreate):
     db_product = models.Product(name=product.name, price=product.price, quantity=product.quantity, image=product.image)

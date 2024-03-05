@@ -116,6 +116,13 @@ class UserData(User):
     paid: bool
     actual_turnover: float
 
+class UserCreateAdmin(BaseModel):
+    email: str
+    hash_pw: str
+    name: str
+    is_active: bool
+    is_admin: bool
+
 class UserCheck(UserBase):
     hash_pw: str
 

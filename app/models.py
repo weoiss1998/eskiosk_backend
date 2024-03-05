@@ -16,6 +16,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     sales_period = Column(String, default="0")
     open_balances = Column(Float, default=0.00)
+    paypal_link = Column(String, nullable=True)
     #items = relationship("Item", back_populates="owner")
 
 
