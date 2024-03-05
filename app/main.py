@@ -1,6 +1,3 @@
-from decimal import Decimal
-from itertools import product
-from operator import inv
 from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -9,17 +6,13 @@ from . import crud, models, schemas, mail, backup, database
 from .database import SessionLocal, engine
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, FileResponse
-from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import random
 from datetime import date, datetime
 import qrcode
-
 import io
 import os
-
 from fastapi.templating import Jinja2Templates
-
 from jinja2 import Environment, PackageLoader
 from weasyprint import HTML
 
@@ -61,8 +54,6 @@ class AuthCode(BaseModel):
     auth_code: int
     timestamp: int
     change: str = None
-
-
 
 def checkAuthCode(check_user: schemas.VerifyMail, db: Session = Depends(get_db), new_pw: str = None):
     for entry in temp_cred_list:
@@ -131,6 +122,22 @@ def create_FastApi_Invoice(user_name: str, items: list, admin_name: str, admin_e
         os.remove("app/templates/qr.png")
     return True
 
+def checkIfAdmin(db, user_id, token):
+    user = crud.get_user(db, user_id)
+    if user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.jwt_token!=token or user.is_admin==False:
+        raise HTTPException(status_code=401, detail="Not authorized")
+    return True
+
+def checkIfAuthentificated(db, user_id, token):
+    user = crud.get_user(db, user_id)
+    if user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.jwt_token!=token:
+        raise HTTPException(status_code=401, detail="Not authorized")
+    return True
+
 @app.get("/backup/")
 def backup_db(action: str):
     backup.backupDB(action=action, date="2024-03-01", dest_db="fastapi_traefik", verbose=True) 
@@ -141,7 +148,8 @@ def backup_db(action: str):
             "content": {"application/octet-stream": {}}
         }
     },)
-def create_backup():
+def create_backup(user_id: int, token: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     compressedFile = backup.backupDB(action="backup", date=datetime.now(), dest_db="fastapi_traefik", verbose=True, nameOfBackup="") 
     return FileResponse(path=compressedFile,media_type='application/octet-stream', filename='backup.dump.gz')
 
@@ -251,17 +259,18 @@ def get_user_by_mail(user: schemas.UserBase, db: Session = Depends(get_db)):
     
 
 @app.get("/users/", response_model=list[schemas.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_users(user_id: int, token: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     users = crud.get_users(db, skip=skip, limit=limit)
     return users
 
 
-@app.get("/users/{user_id}", response_model=schemas.User)
+"""@app.get("/users/{user_id}", response_model=schemas.User)
 def read_user(user_id: int, db: Session = Depends(get_db)):
     db_user = crud.get_user(db, user_id=user_id)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return db_user
+    return db_user"""
 
 @app.get("/products/", response_model=list[schemas.Product])
 def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -269,7 +278,8 @@ def read_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return products
 
 @app.get("/salesEntries/", response_model=list[schemas.SalesEntryWithProductName])
-def read_sales_entries(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_sales_entries(user_id: int, token: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     sales_entries = crud.get_sales_entries(db, skip=skip, limit=limit)
     users = crud.get_users(db, skip=0, limit=1024)
     modifed_entries=list()
@@ -286,7 +296,8 @@ def read_sales_entries(skip: int = 0, limit: int = 100, db: Session = Depends(ge
     return modifed_entries
 
 @app.get("/salesEntriesID/", response_model=list[schemas.SalesEntryWithProductName])
-def read_sales_entries_by_uid(user_id: int, db: Session = Depends(get_db)):
+def read_sales_entries_by_uid(user_id: int, token: str, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
     sales_entries = crud.get_sales_entry_by_user_id(db, user_id=user_id)
     modifed_entries=list()
     for entry in sales_entries:
@@ -297,14 +308,16 @@ def read_sales_entries_by_uid(user_id: int, db: Session = Depends(get_db)):
     return modifed_entries
 
 @app.post("/products/", response_model=schemas.Product)
-def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+def create_product(user_id: int, token: str, product: schemas.ProductCreate, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     db_product = crud.get_product_by_name(db, name=product.name)
     if db_product:
         raise HTTPException(status_code=400, detail="Product already exists")
     return crud.create_product(db=db, product=product)
 
 @app.patch("/changeprice/", response_model=schemas.ProductUpdate)
-def updatePrice(product_id: int, price: float, db: Session = Depends(get_db)):
+def updatePrice(user_id: int, token: str, product_id: int, price: float, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     db_product = crud.update_price(db, product_id=product_id, price=price)
     if price<0:
         raise HTTPException(status_code=400, detail="Price cannot be smaller than 0")
@@ -313,7 +326,8 @@ def updatePrice(product_id: int, price: float, db: Session = Depends(get_db)):
     return db_product
 
 @app.patch("/changestock/", response_model=schemas.ProductUpdate)
-def updateStock(product_id: int, quantity: int, db: Session = Depends(get_db)):
+def updateStock(user_id: int, token: str, product_id: int, quantity: int, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     if quantity<0:
        raise HTTPException(status_code=400, detail="Stock cannot be smaller than 0") 
     db_product = crud.update_stock(db, product_id=product_id, quantity=quantity)
@@ -322,7 +336,8 @@ def updateStock(product_id: int, quantity: int, db: Session = Depends(get_db)):
     return db_product
 
 @app.patch("/reducequantity/", response_model=schemas.ProductUpdate)
-def reduceQuantity(product_id: int, quantity: int, db: Session = Depends(get_db)):
+def reduceQuantity(user_id: int, token: str, product_id: int, quantity: int, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     db_product = crud.get_product(db, product_id=product_id)
     if db_product==None:
         raise HTTPException(status_code=400, detail="Product doesn't exists")
@@ -332,33 +347,32 @@ def reduceQuantity(product_id: int, quantity: int, db: Session = Depends(get_db)
     return db_product
 
 @app.patch("/changename/", response_model=schemas.ProductUpdate )
-def updateName(product_id: int, name: str, db: Session = Depends(get_db)):
+def updateName(user_id: int, token: str, product_id: int, name: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     db_product = crud.update_name(db, product_id=product_id, name=name)
     if db_product==None:
         raise HTTPException(status_code=400, detail="Product doesn't exists")
     return db_product
 
 @app.patch("/changeUserStatus/", response_model=schemas.UserUpdate)
-def updateUserStatus(user_id: int, is_active: bool, db: Session = Depends(get_db)):
-    db_user = crud.update_user_status(db, user_id=user_id, is_active=is_active)
+def updateUserStatus(user_id: int, token: str, change_id: int, is_active: bool, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_user = crud.update_user_status(db, user_id=change_id, is_active=is_active)
     if db_user==None:
         raise HTTPException(status_code=400, detail="User doesn't exists")
     return db_user
 
 @app.patch("/changeUserAdmin/", response_model=schemas.UserUpdate) 
-def updateUserAdmin(user_id: int, is_admin: bool, db: Session = Depends(get_db)):
-    db_user = crud.update_user_admin(db, user_id=user_id, status=is_admin)
+def updateUserAdmin(user_id: int, token: str, change_id: int, is_admin: bool, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_user = crud.update_user_admin(db, user_id=change_id, status=is_admin)
     if db_user==None:
         raise HTTPException(status_code=400, detail="User doesn't exists")
     return db_user
 
-"""@app.get("/chart/")
-def read_products(q: Annotated[list[str], Query()] = ["foo", "bar"]):
-    query_items = {"q": q}
-    return query_items"""
-
 @app.post("/cart/products/")
-def checkout_cart(q: Annotated[list[schemas.ProductBuyInfo] | None, Query()] = None, db: Session = Depends(get_db)):
+def checkout_cart(user_id: int, token: str, q: Annotated[list[schemas.ProductBuyInfo] | None, Query()] = None, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
     query_items = {"q": q}
     users =  crud.get_users(db, skip=0, limit=1024)
     products =  crud.get_products(db, skip=0, limit=1024)
@@ -388,16 +402,9 @@ def checkout_cart(q: Annotated[list[schemas.ProductBuyInfo] | None, Query()] = N
         crud.reduce_stock(db, product_id=product.id, quantity=product.quantity)
     return query_items
 
-@app.delete("/delete/users/")
-def delete_all_users(db: Session = Depends(get_db)):
-    return crud.delete_all_users(db)
-
-@app.delete("/delete/users/{email}")
-def delete_user_by_email(email: str, db: Session = Depends(get_db)):
-    return crud.delete_user_by_email(db, email)
-
 @app.get("/userData/", response_model=list[schemas.UserData])
-def get_user_data(db: Session = Depends(get_db)):
+def get_user_data(user_id: int, token: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     users = crud.get_users(db, skip=0, limit=1024)
     sales_entries = crud.get_sales_entries(db, skip=0, limit=1024)
     user_data = list()
@@ -418,111 +425,111 @@ def get_user_data(db: Session = Depends(get_db)):
                         paid=False
                 if int(entry.period)==period:
                     actual_turnover+=entry.price*float(entry.quantity)
-        if last_turnover==0.0:
+        if last_turnover<=0.0:
             paid=True
         user_data.append(schemas.UserData(id=user.id, email=user.email, is_active=user.is_active, is_admin=user.is_admin, sales_period=user.sales_period, name=user.name, last_turnover=last_turnover, paid=paid, actual_turnover=actual_turnover, open_balances=user.open_balances))
     return user_data
 
 @app.patch("/changePayPalLink/")
 def set_paypal_link(user_id: int, token: str, link: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
     user = crud.get_user(db, user_id)
-    if user.jwt_token!=token or user.is_admin==False or user==None:
-        raise HTTPException(status_code=401, detail="Not authorized")
     crud.set_paypal_link(db, user_id, link)
     return True
 
 @app.post("/closePeriod/")
 def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
     admin = crud.get_user(db, admin_id)
-    if admin.jwt_token!=token or admin.is_admin==False:
-        raise HTTPException(status_code=401, detail="Not authorized")
-    users = crud.get_users(db, skip=0, limit=1024)
-    sales_entries = crud.get_sales_entries(db, skip=0, limit=1024)
-    class Item():
-        name: str
-        price_per_unit: float
-        quantity: int
-        total_price: float
-
-    for user in users:
-        list_items = list()
-        last_unpaid_turnover = crud.get_open_balances(db, user.id)
-        period = int(user.sales_period)
-        for entry in sales_entries:
-            if entry.user_id==user.id:
-                if int(entry.period)<period and entry.paid==False:
-                    last_unpaid_turnover+=entry.price*float(entry.quantity)
-                    entry.paid=True
-                    crud.change_paid(db, entry.id, True)
-                if entry.paid==False:
-                    if len(list_items)==0:
-                        temp = Item()
-                        temp.name=crud.get_product(db, entry.product_id).name
-                        temp.price_per_unit=entry.price
-                        temp.quantity=entry.quantity
-                        temp.total_price=entry.price*float(entry.quantity)
-                        list_items.append(temp)
-                    else:
-                        for item in list_items:
-                            temp_name = crud.get_product(db, entry.product_id).name
-                            print(temp_name)
-                            if item.name==temp_name and item.price_per_unit==entry.price:
-                                item.quantity+=entry.quantity
-                                item.total_price+=entry.price*float(entry.quantity)
-                            else:
-                                temp = Item()
-                                temp.name=temp_name
-                                temp.price_per_unit=entry.price
-                                temp.quantity=entry.quantity
-                                temp.total_price=entry.price*float(entry.quantity)
-                                list_items.append(temp)
-        
-        total_turnover = sum([i.total_price for i in list_items])
-        print(total_turnover)        
-        if last_unpaid_turnover!=0.0:
-            crud.update_open_balances(db, user.id, last_unpaid_turnover)
-            temp = Item()
-            temp.name="Open Balances"
-            temp.price_per_unit=0.00
-            temp.quantity=1
-            temp.total_price=last_unpaid_turnover
-            list_items.append(temp)
-        user_balance = total_turnover+last_unpaid_turnover
-        if user_balance<=0.0 and total_turnover!=0.0:
-            for entry in sales_entries:
-                if entry.user_id==user.id and entry.paid==False:
-                    crud.change_paid(db, entry.id, True)
-            crud.update_open_balances(db, user.id, user_balance)
-
-        class StringItem():
+    if checkIfAdmin(db, admin_id, token):
+        users = crud.get_users(db, skip=0, limit=1024)
+        sales_entries = crud.get_sales_entries(db, skip=0, limit=1024)
+        class Item():
             name: str
-            price_per_unit: str
-            quantity: str
-            total_price: str
-        if len(list_items)!=0:
-            string_items = list()
-            for item in list_items:
-                temp = StringItem()
-                temp.name=item.name
-                temp.price_per_unit=str(f"{item.price_per_unit:.2f}")
-                temp.quantity=str(item.quantity)
-                temp.total_price=str(f"{item.total_price:.2f}")    
-                string_items.append(temp) 
-            json_items = jsonable_encoder(string_items)#to be changed
-            print(json_items)
-            create_FastApi_Invoice(user.name, json_items, admin.name, admin.email, admin.paypal_link, user_balance)
-        crud.increase_sales_period(db, user.email)
+            price_per_unit: float
+            quantity: int
+            total_price: float
+
+        for user in users:
+            list_items = list()
+            last_unpaid_turnover = crud.get_open_balances(db, user.id)
+            period = int(user.sales_period)
+            for entry in sales_entries:
+                if entry.user_id==user.id:
+                    if int(entry.period)<period and entry.paid==False:
+                        last_unpaid_turnover+=entry.price*float(entry.quantity)
+                        entry.paid=True
+                        crud.change_paid(db, entry.id, True)
+                    if entry.paid==False:
+                        if len(list_items)==0:
+                            temp = Item()
+                            temp.name=crud.get_product(db, entry.product_id).name
+                            temp.price_per_unit=entry.price
+                            temp.quantity=entry.quantity
+                            temp.total_price=entry.price*float(entry.quantity)
+                            list_items.append(temp)
+                        else:
+                            for item in list_items:
+                                temp_name = crud.get_product(db, entry.product_id).name
+                                print(temp_name)
+                                if item.name==temp_name and item.price_per_unit==entry.price:
+                                    item.quantity+=entry.quantity
+                                    item.total_price+=entry.price*float(entry.quantity)
+                                else:
+                                    temp = Item()
+                                    temp.name=temp_name
+                                    temp.price_per_unit=entry.price
+                                    temp.quantity=entry.quantity
+                                    temp.total_price=entry.price*float(entry.quantity)
+                                    list_items.append(temp)
+            
+            total_turnover = sum([i.total_price for i in list_items])
+            print(total_turnover)        
+            if last_unpaid_turnover!=0.0:
+                crud.update_open_balances(db, user.id, last_unpaid_turnover)
+                temp = Item()
+                temp.name="Open Balances"
+                temp.price_per_unit=0.00
+                temp.quantity=1
+                temp.total_price=last_unpaid_turnover
+                list_items.append(temp)
+            user_balance = total_turnover+last_unpaid_turnover
+            if user_balance<=0.0 and total_turnover!=0.0:
+                for entry in sales_entries:
+                    if entry.user_id==user.id and entry.paid==False:
+                        crud.change_paid(db, entry.id, True)
+                crud.update_open_balances(db, user.id, user_balance)
+
+            class StringItem():
+                name: str
+                price_per_unit: str
+                quantity: str
+                total_price: str
+            if len(list_items)!=0:
+                string_items = list()
+                for item in list_items:
+                    temp = StringItem()
+                    temp.name=item.name
+                    temp.price_per_unit=str(f"{item.price_per_unit:.2f}")
+                    temp.quantity=str(item.quantity)
+                    temp.total_price=str(f"{item.total_price:.2f}")    
+                    string_items.append(temp) 
+                json_items = jsonable_encoder(string_items)#to be changed
+                print(json_items)
+                create_FastApi_Invoice(user.name, json_items, admin.name, admin.email, admin.paypal_link, user_balance)
+            crud.increase_sales_period(db, user.email)
 
 @app.patch("/changePaid/")
-def change_paid(user_id: int, paid: bool, db: Session = Depends(get_db)):
-    sales_entries = crud.get_sales_entry_by_user_id(db, user_id)
-    crud.update_open_balances(db, user_id, 0.0)
+def change_paid(user_id: int, token: str, change_id: int, paid: bool, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    sales_entries = crud.get_sales_entry_by_user_id(db, change_id)
+    crud.update_open_balances(db, change_id, 0.0)
     for entry in sales_entries:
         crud.change_paid(db, entry.id, paid)
     return True
 
 @app.post("/sendMoney/")
-def send_money(user_id: int, email:str, amount: float, db: Session = Depends(get_db)):
+def send_money(user_id: int, token:str, email:str, amount: float, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
     user = crud.get_user(db, user_id)
     if user.email==email:
         raise HTTPException(status_code=400, detail="You cannot send money to yourself")
@@ -538,17 +545,11 @@ def send_money(user_id: int, email:str, amount: float, db: Session = Depends(get
     return True
 
 @app.post("/addOpenBalances/")
-def add_open_balances(user_id: int, amount: float, db: Session = Depends(get_db)):
-    user = crud.get_user(db, user_id)
+def add_open_balances(user_id: int, token: str, change_id:int, amount: float, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    user = crud.get_user(db, change_id)
     if user==None:
         raise HTTPException(status_code=404, detail="User not found")
-    old_amount= crud.get_open_balances(db, user_id)
-    crud.update_open_balances(db, user_id, old_amount-amount)
-    return True
-
-
-
-@app.get("/testInvoices/")
-def test_Invoice():
-    create_FastApi_Invoice()
+    old_amount= crud.get_open_balances(db, change_id)
+    crud.update_open_balances(db, change_id, old_amount-amount)
     return True
