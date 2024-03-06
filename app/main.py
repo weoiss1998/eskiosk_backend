@@ -1,3 +1,4 @@
+from re import T
 from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -26,7 +27,7 @@ origins = [
     "http://localhost:8080",
 ]
 
-TESTING: bool = Field(..., env='TESTING')
+TESTING = os.environ.get("TESTING", 0)
 
 temp_cred_list = list()
 
@@ -178,9 +179,11 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     curr_dt = datetime.now()
     timestamp = int(round(curr_dt.timestamp()))
     generatedCode = random.randint(100000, 999999)
-    if TESTING:
+    if TESTING == 1:
         print(generatedCode)
         generatedCode = 123456
+    if TESTING==0:
+        print("testing is false")
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="no")
     temp_cred_list.append(entry)   
 
@@ -200,7 +203,7 @@ def resetPassword(user: schemas.UserCreate, db: Session = Depends(get_db)):
     curr_dt = datetime.now()
     timestamp = int(round(curr_dt.timestamp()))
     generatedCode = random.randint(100000, 999999)
-    if TESTING:
+    if TESTING == 1:
         print(generatedCode)
         generatedCode = 123456
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="yes")
@@ -237,11 +240,12 @@ def updatePassword(user: schemas.CheckNewPassword, db: Session = Depends(get_db)
 
 @app.post("/auth/", response_model=schemas.UserCheck)
 def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
+    print(TESTING)
     db_user = crud.get_user_by_email(db, email=user.email)
     if crud.checkPassword(user.hash_pw, db_user.hashed_password)==False:
         raise HTTPException(status_code=400, detail="Password wrong!")
     token=123456789
-    if TESTING:
+    if TESTING ==1:
         token=123456789
     crud.update_user_token(db, db_user.id, token)
     item = schemas.Item(message="success",user_id=db_user.id, token=token, is_admin=db_user.is_admin)
