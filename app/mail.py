@@ -1,8 +1,19 @@
 # smtplib Module importieren
+import os
 import smtplib
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SMTP_HOST=os.getenv('SMTP_HOST')
+SMTP_PORT=int(os.getenv('SMTP_PORT'))
+SMTP_USERNAME=os.getenv('SMTP_USERNAME')
+SMTP_PASSWORD=os.getenv('SMTP_PASSWORD')
+EMAIL_FROM_NAME=os.getenv('EMAIL_FROM_NAME')
+EMAIL_FROM_ADDRESS=os.getenv('EMAIL_FROM_ADDRESS')
 
 MEINE_ADRESSE = 'simon.heinrich.weiss@web.de'
 PASSWORT = ''
@@ -25,7 +36,7 @@ def prepare_mail(s, namen, emails):
         message = messageTemplate.format(KONTAKT_NAME=name)
 
         # Parameters der Nachricht vorbereiten
-        msg['From']=MEINE_ADRESSE
+        msg['From']=EMAIL_FROM_ADDRESS
         msg['To']=email
         msg['Subject']="Ich lerne Python 3"
 
@@ -43,7 +54,7 @@ def auth_code_mail(s, email, code):
     # Vorname in die Nachricht einfü
     message = codeTemplate.format(KONTAKT_NAME=email, CODE=code)
 
-    msg['From']=MEINE_ADRESSE
+    msg['From']=EMAIL_FROM_ADDRESS
     msg['To']=email
     msg['Subject']="Verifizierungscode"
 
@@ -61,7 +72,7 @@ def reset_code_mail(s, email, code):
     # Vorname in die Nachricht einfü
     message = resetCodeTemplate.format(KONTAKT_NAME=email, CODE=code)
 
-    msg['From']=MEINE_ADRESSE
+    msg['From']=EMAIL_FROM_ADDRESS
     msg['To']=email
     msg['Subject']="Resetcode"
 
@@ -74,23 +85,23 @@ def reset_code_mail(s, email, code):
     del msg
 
 def send_auth_code(email, code):
-    s = smtplib.SMTP(host='smtp.web.de', port=587)
+    s = smtplib.SMTP(host=SMTP_HOST, port=SMTP_PORT)
     s.starttls()
-    #s.login(MEINE_ADRESSE, PASSWORT)
+    s.login(SMTP_USERNAME, SMTP_PASSWORD)
     auth_code_mail(s, email, code)
     s.quit()
 
 def send_reset_code(email, code):
-    s = smtplib.SMTP(host='smtp.web.de', port=587)
+    s = smtplib.SMTP(host=SMTP_HOST, port=SMTP_PORT)
     s.starttls()
-    #s.login(MEINE_ADRESSE, PASSWORT)
+    s.login(SMTP_USERNAME, SMTP_PASSWORD)
     reset_code_mail(s, email, code)
     s.quit()
 
 def send_mail_test():
     s = smtplib.SMTP(host='smtp.web.de', port=587)
     s.starttls()
-    #s.login(MEINE_ADRESSE, PASSWORT)
+    s.login(SMTP_USERNAME, SMTP_PASSWORD)
     namen = {"Simon"}
     emails = {"simon.heinrich.weiss@web.de"}
 

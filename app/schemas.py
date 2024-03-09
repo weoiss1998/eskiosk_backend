@@ -1,3 +1,4 @@
+import time
 from pydantic import BaseModel
 from typing import Optional, List, Annotated, Union
 
@@ -60,7 +61,8 @@ class SalesEntry(SalesBase):
     price: float
     quantity: int
     paid: bool
-    period: str
+    period: int
+    timestamp: str
 
     class Config:
         orm_mode = True
@@ -73,7 +75,8 @@ class SalesEntryWithProductName(SalesBase):
     price: float
     quantity: int
     paid: bool
-    period: str
+    period: int
+    timestamp: str
 
     class Config:
         orm_mode = True
@@ -84,7 +87,8 @@ class SalesEntryCreate(BaseModel):
     price: float
     quantity: int
     paid: bool = False
-    period: str
+    period: int
+    timestamp: str
 
     class Config:
         orm_mode = True
@@ -106,6 +110,7 @@ class User(UserBase):
     is_admin: bool
     sales_period: str
     open_balances: float
+    token_timestamp: Optional[int] = None
 
     class Config:
         orm_mode = True
