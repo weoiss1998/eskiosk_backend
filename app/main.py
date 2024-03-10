@@ -1,4 +1,3 @@
-from re import A, T
 from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -263,7 +262,6 @@ def updatePassword(user: schemas.CheckNewPassword, db: Session = Depends(get_db)
 
 @app.post("/auth/", response_model=schemas.UserCheck)
 def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
-    print(TESTING)
     db_user = crud.get_user_by_email(db, email=user.email)
     if crud.checkPassword(user.hash_pw, db_user.hashed_password)==False:
         raise HTTPException(status_code=400, detail="Password wrong!")
@@ -296,6 +294,9 @@ def get_user_by_mail(user: schemas.UserBase, db: Session = Depends(get_db)):
     if check_for_admin_user is None:
         user = schemas.UserCreateAdmin(email="admin", hash_pw="admin", name="admin", is_admin=True, is_active=True)
         crud.create_admin_user(db=db, user=user)
+    check_global_settings = crud.get_global_state_settings(db)
+    if check_global_settings is None:
+        crud.create_global_state(db)
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -351,7 +352,7 @@ def create_product(user_id: int, token: str, product: schemas.ProductCreate, db:
         raise HTTPException(status_code=400, detail="Product already exists")
     return crud.create_product(db=db, product=product)
 
-@app.patch("/changeprice/", response_model=schemas.ProductUpdate)
+@app.patch("/changePrice/", response_model=schemas.ProductUpdate)
 def updatePrice(user_id: int, token: str, product_id: int, price: float, db: Session = Depends(get_db)):
     checkIfAdmin(db, user_id, token)
     db_product = crud.update_price(db, product_id=product_id, price=price)
@@ -361,7 +362,7 @@ def updatePrice(user_id: int, token: str, product_id: int, price: float, db: Ses
         raise HTTPException(status_code=400, detail="Product doesn't exists")
     return db_product
 
-@app.patch("/changestock/", response_model=schemas.ProductUpdate)
+@app.patch("/changeStock/", response_model=schemas.ProductUpdate)
 def updateStock(user_id: int, token: str, product_id: int, quantity: int, db: Session = Depends(get_db)):
     checkIfAdmin(db, user_id, token)
     if quantity<0:
@@ -382,7 +383,7 @@ def reduceQuantity(user_id: int, token: str, product_id: int, quantity: int, db:
     db_product = crud.reduce_stock(db, product_id=product_id, quantity=quantity)
     return db_product
 
-@app.patch("/changename/", response_model=schemas.ProductUpdate )
+@app.patch("/changeName/", response_model=schemas.ProductUpdate )
 def updateName(user_id: int, token: str, product_id: int, name: str, db: Session = Depends(get_db)):
     checkIfAdmin(db, user_id, token)
     db_product = crud.update_name(db, product_id=product_id, name=name)
@@ -390,10 +391,34 @@ def updateName(user_id: int, token: str, product_id: int, name: str, db: Session
         raise HTTPException(status_code=400, detail="Product doesn't exists")
     return db_product
 
+@app.patch("/changeActive/")
+def updateActive(user_id: int, token: str, product_id: int, is_active: bool, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_product = crud.update_active(db, product_id=product_id, is_active=is_active)
+    if db_product==None:
+        raise HTTPException(status_code=400, detail="Product doesn't exists")
+    return True
+
+@app.patch("/changeType/")
+def updateType(user_id: int, token: str, product_id: int, type_of_product: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_product = crud.update_type(db, product_id=product_id, type_of_product=type_of_product)
+    if db_product==None:
+        raise HTTPException(status_code=400, detail="Product doesn't exists")
+    return True
+
+@app.patch("/changeImage/")
+def updateImage(user_id: int, token: str, product_id: int, image: schemas.BodyImage, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_product = crud.update_image(db, product_id=product_id, image=image.image)
+    if db_product==None:
+        raise HTTPException(status_code=400, detail="Product doesn't exists")
+    return True
+
 @app.patch("/changeUserStatus/", response_model=schemas.UserUpdate)
 def updateUserStatus(user_id: int, token: str, change_id: int, is_active: bool, db: Session = Depends(get_db)):
     checkIfAdmin(db, user_id, token)
-    db_user = crud.update_user_status(db, user_id=change_id, is_active=is_active)
+    db_user = crud.update_user_status(db, user_id=change_id, status=is_active)
     if db_user==None:
         raise HTTPException(status_code=400, detail="User doesn't exists")
     return db_user
@@ -449,7 +474,6 @@ def get_user_data(user_id: int, token: str, db: Session = Depends(get_db)):
         last_turnover = open_balances
         actual_turnover = 0.0 
         period = int(user.sales_period)
-        user.name = "Test"
         paid = False
         for entry in sales_entries:
             if entry.user_id==user.id:
@@ -587,4 +611,83 @@ def add_open_balances(user_id: int, token: str, change_id:int, amount: float, db
         raise HTTPException(status_code=404, detail="User not found")
     old_amount= crud.get_open_balances(db, change_id)
     crud.update_open_balances(db, change_id, old_amount-amount)
+    return True
+
+@app.get("/getSettings/")
+def get_settings(user_id: int, token: str, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
+    db_user=crud.get_user(db, user_id)
+    if db_user.is_admin==True:
+        admin_settings = crud.get_global_state_settings(db)
+        if admin_settings.paypal_link==None:
+            admin_settings.paypal_link=""
+        settings = schemas.AdminSettings(mail_for_purchases=db_user.mail_for_purchases, confirmation_prompt=db_user.confirmation_prompt, auto_invoice=admin_settings.auto_invoice, paypal_link=admin_settings.paypal_link, set_warning_for_product=db_user.set_warning_for_product)
+    else:
+        settings = schemas.UserSettings(mail_for_purchases=db_user.mail_for_purchases, confirmation_prompt=db_user.confirmation_prompt)
+    return settings
+
+@app.patch("/change_mail_for_purchases/")
+def change_mail_for_purchases(user_id: int, token: str, mail_for_purchases: bool, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
+    crud.update_mail_for_purchases(db, user_id, mail_for_purchases)
+    return True
+
+@app.patch("/change_confirmation_prompt/")
+def change_confirmation_prompt(user_id: int, token: str, confirmation_prompt: bool, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
+    crud.update_confirmation_prompt(db, user_id, confirmation_prompt)
+    return True
+
+@app.patch("/change_auto_invoice/")
+def change_auto_invoice(user_id: int, token: str, auto_invoice: bool, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    crud.update_auto_invoice(db, auto_invoice)
+    return True
+
+@app.patch("/change_set_warning_for_product/")
+def change_set_warning_for_product(user_id: int, token: str, set_warning_for_product: int, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    crud.update_set_warning_for_product(db, user_id, set_warning_for_product)
+    return True
+
+@app.patch("/updateNewPassword/")
+def update_password(user: schemas.UserPasswordUpdate, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user.user_id, user.token)
+    db_user= crud.get_user(db, user.user_id)
+    crud.update_password(db, db_user.email, user.password)
+    return True
+
+@app.patch("/changePassword/")
+def change_password_of_user(user_id: int, token: str, user: schemas.AdminPasswordChange, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_user= crud.get_user(db, user.change_id)
+    if db_user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    crud.update_password(db, db_user.email, user.password)
+    return True
+
+@app.patch("/changeNameUser/")
+def change_name_of_user(user_id: int, token: str, change_id: int, name: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_user= crud.get_user(db, change_id)
+    if db_user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    crud.update_name_user(db, change_id, name)
+    return True
+
+@app.patch("/changeEmail/")
+def change_email(user_id: int, token: str, change_id: int, email: str, db: Session = Depends(get_db)):
+    checkIfAdmin(db, user_id, token)
+    db_user= crud.get_user(db, change_id)
+    if db_user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if crud.get_user_by_email(db, email)!=None:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    crud.update_email(db, change_id, email)
+    return True
+
+@app.patch("/logout/")
+def logout(user_id: int, token: str, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
+    crud.update_user_token(db, user_id, "-1")
     return True

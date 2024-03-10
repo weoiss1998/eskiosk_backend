@@ -1,24 +1,24 @@
-import time
 from pydantic import BaseModel
 from typing import Optional, List, Annotated, Union
 
+from app.database import Base
+
 class ProductBase(BaseModel):
-    name: str
-    price: float | None = None
-    quantity: int | None = None
-
-
-class ProductCreate(ProductBase):
     name: str
     price: float | None = 0
     quantity: int | None = 0
+
+
+class ProductCreate(ProductBase):
     image: str | None = None
+    type_of_product: str | None = "product"
 
 
 class Product(ProductBase):
     id: int
     is_active: bool
     image: str
+    type_of_product: str
 
     class Config:
         orm_mode = True
@@ -102,6 +102,10 @@ class UserCreate(UserBase):
     hash_pw: str
     name: str
 
+class UserPasswordUpdate(BaseModel):
+    user_id: int
+    token: str
+    password: str
 
 class User(UserBase):
     id: int
@@ -154,3 +158,25 @@ class UserUpdate(BaseModel):
     
     class Config:
         orm_mode = True
+
+class UserSettings(BaseModel):
+    mail_for_purchases: bool
+    confirmation_prompt: bool
+
+    class Config:
+        orm_mode = True
+
+class AdminSettings(UserSettings):
+    auto_invoice: bool
+    paypal_link: str
+    set_warning_for_product: int
+
+    class Config:
+        orm_mode = True
+
+class BodyImage(BaseModel):
+    image: str
+
+class AdminPasswordChange(BaseModel):
+    change_id: int
+    password: str

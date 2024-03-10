@@ -1,4 +1,3 @@
-from os import times
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, LargeBinary, Numeric, Float
 #from sqlalchemy.orm import relationship
 
@@ -19,6 +18,8 @@ class User(Base):
     sales_period = Column(Integer, default=0)
     open_balances = Column(Float, default=0.00)
     set_warning_for_product = Column(Integer, default=-1)
+    mail_for_purchases = Column(Boolean, default=True)
+    confirmation_prompt = Column(Boolean, default=True)
     #items = relationship("Item", back_populates="owner")
 
 
@@ -30,6 +31,7 @@ class Product(Base):
     is_active = Column(Boolean, default=True)
     price = Column(Float)
     quantity = Column(Integer)
+    type_of_product = Column(String, default="product")
     image = Column(String, nullable=True)
     
 
