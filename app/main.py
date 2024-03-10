@@ -691,3 +691,30 @@ def logout(user_id: int, token: str, db: Session = Depends(get_db)):
     checkIfAuthentificated(db, user_id, token)
     crud.update_user_token(db, user_id, "-1")
     return True
+
+@app.get("/products/oneSort/")
+def read_one_sort(sort: str, db: Session = Depends(get_db)):
+    products = crud.get_one_sort(db, sort)
+    return products
+
+@app.post("/singleCheckOut/")
+def single_checkout(user_id: int, token: str, product_id: int, db: Session = Depends(get_db)):
+    checkIfAuthentificated(db, user_id, token)
+    user =  crud.get_user(db, user_id)
+    product =  crud.get_product(db, product_id)
+    if user==None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if product==None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if product.quantity<=0:
+        raise HTTPException(status_code=404, detail="Product not available")
+    tempPeriod = user.sales_period
+    schema_entry=schemas.SalesEntryCreate(user_id=user_id, product_id=product.id, price=product.price, quantity=1, period=tempPeriod, timestamp=str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S")))
+    crud.create_sales_entry(db, schema_entry)
+    crud.reduce_stock(db, product_id=product.id, quantity=product.quantity-1)
+    return True
+
+@app.get("/products/avaiable/")
+def read_avaiable(db: Session = Depends(get_db)):
+    products = crud.get_active_products(db)
+    return products
