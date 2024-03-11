@@ -38,3 +38,5 @@ docker compose -f docker-compose_test.yml up
 Und schließlich können die Tests neu durchgeführt werden.
 
 Als Basis diente: [https://github.com/ed-roh/react-admin-dashboard](https://github.com/ed-roh/react-admin-dashboard)
+
+Ein Nutzer ohne gültige E-Mail-Adresse darf keine Umsätze machen, bitte beim Admin-Nutzer beachten!
