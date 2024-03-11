@@ -18,6 +18,9 @@ from weasyprint import HTML
 from pydantic import Field
 from dotenv import load_dotenv
 import pytz
+from uuid import uuid4
+from fastapi_utils.tasks import repeat_every
+from fastapi.testclient import TestClient
 
 load_dotenv()
 
@@ -32,7 +35,7 @@ env = Environment(loader=PackageLoader('app', 'templates'))
 
 origins = [
     "http://localhost",
-    "http://localhost:8080",
+    "http://localhost:8080"
 ]
 
 TESTING = os.environ.get("TESTING", 0)
@@ -42,6 +45,8 @@ temp_cred_list = list()
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +71,16 @@ class AuthCode(BaseModel):
     auth_code: int
     timestamp: int
     change: str = None
+
+client = TestClient(app)
+
+@app.on_event("startup")
+@repeat_every(seconds=10, wait_first=True)
+def periodic():
+    if TESTING == "0":
+        response = client.post("/check-account/", json={"email": "admin"})
+        data = response.json()
+        print(data)
 
 def checkAuthCode(check_user: schemas.VerifyMail, db: Session = Depends(get_db), new_pw: str = None):
     for entry in temp_cred_list:
@@ -94,10 +109,14 @@ def checkExpiry():
     curr_dt = datetime.now()
     timestamp = int(round(curr_dt.timestamp()))
     for entry in temp_cred_list:
-        if timestamp-entry.timestamp>TOKEN_EXPIRY_MINUTES*60:
-            temp_cred_list.remove(entry)
+        if TESTING == "1":
+            if entry.timestamp != 1234567890:
+                temp_cred_list.remove(entry)
+        else:
+            if timestamp-entry.timestamp>TOKEN_EXPIRY_MINUTES*60:
+                temp_cred_list.remove(entry)
 
-def create_FastApi_Invoice(user_name: str, items: list, admin_name: str, admin_email: str, admin_link:str, total: float):
+def create_FastApi_Invoice(user_name: str,user_email: str, items: list, admin_name: str, admin_email: str, admin_link:str, total: float):
     today = datetime.today().strftime("%B %-d, %Y")
     user_name_without_spaces = user_name.replace(" ", "")
     invoice_date= datetime.today().strftime("%Y%m%d")
@@ -136,31 +155,40 @@ def create_FastApi_Invoice(user_name: str, items: list, admin_name: str, admin_e
     # write the parsed template
     if total>0.0:
         os.remove("app/templates/qr.png")
+
+    if TESTING == "0" and total !=0.00:
+        mail.send_accounting_mail(email=user_email, name=user_name, balance=total_string, invoice=rendered_pdf, invoice_name=user_name+today+".pdf")
     return True
 
 def checkIfAdmin(db, user_id, token):
     user = crud.get_user(db, user_id)
     if user==None:
         raise HTTPException(status_code=404, detail="User not found")
-    print ("User.token "+user.token)
-    print ("Token "+token)
-    print("user.token_timestamp "+str(user.token_timestamp))
-    print("user.token_timestamp+TOKEN_EXPIRY_MINUTES*60 "+str(user.token_timestamp+TOKEN_EXPIRY_MINUTES*60))
-    print("timestamp "+str(int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp()))))
-
-    if user.token!=token or user.is_admin==False or user.token_timestamp==None or user.token_timestamp+TOKEN_EXPIRY_MINUTES*60<int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())):
-        raise HTTPException(status_code=401, detail="Not authorized")
-    crud.update_user_time_stamp(db, user_id, int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())))
+    if TESTING == "1":
+        if user.token!=token or user.is_admin==False or user.token_timestamp==None or user.token_timestamp!=1234567890:
+            raise HTTPException(status_code=401, detail="Not authorized")
+    else:
+        if user.token!=token or user.is_admin==False or user.token_timestamp==None or user.token_timestamp+TOKEN_EXPIRY_MINUTES*60<int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())):
+            raise HTTPException(status_code=401, detail="Not authorized")
+        crud.update_user_time_stamp(db, user_id, int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())))
     return True
 
 def checkIfAuthentificated(db, user_id, token):
     user = crud.get_user(db, user_id)
     if user==None:
         raise HTTPException(status_code=404, detail="User not found")
-    if user.token!=token or user.token_timestamp==None or user.token_timestamp+TOKEN_EXPIRY_MINUTES*60<int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())):
-        raise HTTPException(status_code=401, detail="Not authorized")
-    crud.update_user_time_stamp(db, user_id, int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())))
+    if TESTING == "1":
+        if user.token!=token or user.token_timestamp==None or user.token_timestamp!=1234567890:
+            raise HTTPException(status_code=401, detail="Not authorized")
+    else:
+        if user.token!=token or user.token_timestamp==None or user.token_timestamp+TOKEN_EXPIRY_MINUTES*60<int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())):
+            raise HTTPException(status_code=401, detail="Not authorized")
+        crud.update_user_time_stamp(db, user_id, int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())))
     return True
+
+@app.get("/test")
+def test(db: Session = Depends(get_db)):
+    return crud.get_user_by_email(db, email="admin")
 
 @app.get("/backup/")
 def backup_db(action: str):
@@ -206,13 +234,14 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     else:
         generatedCode = random.randint(100000, 999999)
         print(generatedCode)
+        mail.send_auth_code(user.email, generatedCode, user.name) #TODO: activate
     print(generatedCode)
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="no")
     temp_cred_list.append(entry)   
 
 
     #print(generatedCode)
-    #mail.send_auth_code(user.email, generatedCode)
+
     item = schemas.Confirm(message="success",token="0")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
@@ -228,10 +257,11 @@ def resetPassword(user: schemas.UserCreate, db: Session = Depends(get_db)):
     generatedCode = random.randint(100000, 999999)
     if TESTING == "1":
         generatedCode = 123456
+    if TESTING == "0":
+        mail.send_reset_code(user.email, generatedCode, db_user.name)
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="yes")
     temp_cred_list.append(entry)
     print(generatedCode)
-    #mail.send_reset_code(user.email, generatedCode)
     item = schemas.Confirm(message="success",token="0")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
@@ -245,6 +275,12 @@ def verify_user(user: schemas.VerifyMail, db: Session = Depends(get_db)):
     db_user_test = crud.get_user_by_email(db, email=db_user.email)
     if db_user_test is None:
         raise HTTPException(status_code=404, detail="User not found")
+    admin_user = crud.get_admin_users(db)
+    if TESTING == "0":
+        for admins in admin_user:
+            if admins.email!="admin":
+                mail.send_admin_activation_mail(admins.email, admins.name, db_user.name)
+
     item = schemas.Confirm(message="success",token="1")
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
@@ -265,11 +301,13 @@ def check_user(user: schemas.UserCheck, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if crud.checkPassword(user.hash_pw, db_user.hashed_password)==False:
         raise HTTPException(status_code=400, detail="Password wrong!")
-    token=123456789
+    token= str(uuid4())
+    timestamp=int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp()))
     if TESTING =="1":
         token=123456789
+        timestamp=1234567890
     crud.update_user_token(db, db_user.id, token)
-    crud.update_user_time_stamp(db, db_user.id, int(round(datetime.now(pytz.timezone('Europe/Berlin')).timestamp())))
+    crud.update_user_time_stamp(db, db_user.id, timestamp)
     item = schemas.Item(message="success",user_id=db_user.id, token=token, is_admin=db_user.is_admin)
     json_compatible_item_data = jsonable_encoder(item)
     return JSONResponse(content=json_compatible_item_data)
@@ -436,7 +474,12 @@ def checkout_cart(user_id: int, token: str, q: Annotated[list[schemas.ProductBuy
     checkIfAuthentificated(db, user_id, token)
     query_items = {"q": q}
     users =  crud.get_users(db, skip=0, limit=1024)
+    admins = crud.get_admin_users(db)
     products =  crud.get_products(db, skip=0, limit=1024)
+    old_prod_quantity = 0
+    user_email = ""
+    user_name = ""
+    user_wants_email = False
     #Check for valid values
     for product in q:
         userFound=False
@@ -444,7 +487,10 @@ def checkout_cart(user_id: int, token: str, q: Annotated[list[schemas.ProductBuy
         for user in users:
             if(user.id==product.user_id):
                 userFound=True
+                user_wants_email = user.mail_for_purchases
                 tempPeriod = user.sales_period
+                user_email = user.email
+                user_name = user.name
                 break
         if userFound==False:
             raise HTTPException(status_code=404, detail="User not found")
@@ -453,14 +499,27 @@ def checkout_cart(user_id: int, token: str, q: Annotated[list[schemas.ProductBuy
                 productFound=True
                 if(product.quantity>prodList.quantity):
                    raise HTTPException(status_code=404, detail="Product Quantity to high!") 
+                old_prod_quantity = prodList.quantity
                 break
         if productFound==False:
             raise HTTPException(status_code=404, detail="Product not found")
-    #Create entry and update stock    
+    #Create entry and update stock  
+    string_buylist = "" 
+    total = 0.00 
     for product in q:  
         schema_entry=schemas.SalesEntryCreate(user_id=product.user_id, product_id=product.id, price=product.price, quantity=product.quantity, period=tempPeriod, timestamp=str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S")))
         crud.create_sales_entry(db, schema_entry)
         crud.reduce_stock(db, product_id=product.id, quantity=product.quantity)
+        product_name = crud.get_product(db, product.id).name
+        if user_wants_email==True:
+            string_buylist+=str(product.quantity)+"x "+product_name+" for "+str(f"{product.price:.2f}")+" "
+            total+=product.price*float(product.quantity)
+
+        for admin in admins:
+            if (old_prod_quantity-product.quantity)<=admin.set_warning_for_product and admin.set_warning_for_product!=-1 and old_prod_quantity>admin.set_warning_for_product and TESTING == "0":
+                mail.send_product_low_stock_mail(admin.email, admin.name, product_name) 
+    if user_wants_email==True and TESTING == "0":
+        mail.send_buy_mail(user_email, user_name, string_buylist, str(f"{total:.2f}"))
     return query_items
 
 @app.get("/userData/", response_model=list[schemas.UserData])
@@ -516,9 +575,9 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
                 if entry.user_id==user.id:
                     if int(entry.period)<period and entry.paid==False:
                         last_unpaid_turnover+=entry.price*float(entry.quantity)
-                        entry.paid=True
-                        crud.change_paid(db, entry.id, True)
-                    if entry.paid==False:
+                        """entry.paid=True
+                        crud.change_paid(db, entry.id, True)"""
+                    if entry.invoiced==False:
                         if len(list_items)==0:
                             temp = Item()
                             temp.name=crud.get_product(db, entry.product_id).name
@@ -540,6 +599,7 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
                                     temp.quantity=entry.quantity
                                     temp.total_price=entry.price*float(entry.quantity)
                                     list_items.append(temp)
+                        crud.change_invoiced(db, entry.id, True)
             
             total_turnover = sum([i.total_price for i in list_items])
             print(total_turnover)        
@@ -554,7 +614,7 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
             user_balance = total_turnover+last_unpaid_turnover
             if user_balance<=0.0 and total_turnover!=0.0:
                 for entry in sales_entries:
-                    if entry.user_id==user.id and entry.paid==False:
+                    if entry.user_id==user.id and entry.paid==False and entry.invoiced==True:
                         crud.change_paid(db, entry.id, True)
                 crud.update_open_balances(db, user.id, user_balance)
 
@@ -574,7 +634,8 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
                     string_items.append(temp) 
                 json_items = jsonable_encoder(string_items)#to be changed
                 print(json_items)
-                create_FastApi_Invoice(user.name, json_items, admin.name, admin.email, admin.paypal_link, user_balance)
+                paypal_link = crud.get_global_state_settings(db).paypal_link
+                create_FastApi_Invoice(user.name, user.email, json_items, admin.name, admin.email, paypal_link, user_balance )
             crud.increase_sales_period(db, user.email)
 
 @app.patch("/changePaid/")
@@ -583,7 +644,8 @@ def change_paid(user_id: int, token: str, change_id: int, paid: bool, db: Sessio
     sales_entries = crud.get_sales_entry_by_user_id(db, change_id)
     crud.update_open_balances(db, change_id, 0.0)
     for entry in sales_entries:
-        crud.change_paid(db, entry.id, paid)
+        if entry.invoiced==True:
+            crud.change_paid(db, entry.id, paid)
     return True
 
 @app.post("/sendMoney/")
@@ -702,6 +764,8 @@ def single_checkout(user_id: int, token: str, product_id: int, db: Session = Dep
     checkIfAuthentificated(db, user_id, token)
     user =  crud.get_user(db, user_id)
     product =  crud.get_product(db, product_id)
+    admins = crud.get_admin_users(db)
+    old_prod_quantity = product.quantity
     if user==None:
         raise HTTPException(status_code=404, detail="User not found")
     if product==None:
@@ -712,6 +776,11 @@ def single_checkout(user_id: int, token: str, product_id: int, db: Session = Dep
     schema_entry=schemas.SalesEntryCreate(user_id=user_id, product_id=product.id, price=product.price, quantity=1, period=tempPeriod, timestamp=str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S")))
     crud.create_sales_entry(db, schema_entry)
     crud.reduce_stock(db, product_id=product.id, quantity=product.quantity-1)
+    for admin in admins:
+        if (old_prod_quantity-1)<=admin.set_warning_for_product and admin.set_warning_for_product!=-1 and old_prod_quantity>admin.set_warning_for_product and TESTING == "0":
+                mail.send_product_low_stock_mail(admin.email, admin.name, product.name) 
+    if user.user_wants_email==True and TESTING == "0":
+        mail.send_buy_mail(user.user_email, user.user_name, product.name, str(f"{product.price:.2f}"))
     return True
 
 @app.get("/products/avaiable/")

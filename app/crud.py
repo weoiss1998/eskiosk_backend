@@ -60,7 +60,7 @@ def delete_sales_entry(db: Session, entry_id: int):
 
 def create_user(db: Session, user: schemas.UserCreate):
     hashed_password = hasher.hash(user.hash_pw)
-    db_user = models.User(email=user.email, hashed_password=hashed_password, name=user.name, token_timestamp=-1)
+    db_user = models.User(email=user.email, hashed_password=hashed_password, name=user.name, token_timestamp=-1, is_active = False)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -68,7 +68,7 @@ def create_user(db: Session, user: schemas.UserCreate):
 
 def create_admin_user(db: Session, user: schemas.UserCreateAdmin):
     hashed_password = hasher.hash(user.hash_pw)
-    db_user = models.User(email=user.email, hashed_password=hashed_password, name=user.name, is_admin=True,token_timestamp=-1)
+    db_user = models.User(email=user.email, hashed_password=hashed_password, name=user.name, is_admin=True,token_timestamp=-1, is_active = True)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -97,7 +97,7 @@ def get_active_products(db: Session):
     return db.query(models.Product).filter(models.Product.is_active == True).all()
 
 def get_one_sort(db: Session, type_of_product: str):
-    return db.query(models.Product).filter(models.Product.type_of_product == type_of_product and models.Product.is_active == True).all()
+    return db.query(models.Product).filter(models.Product.type_of_product == type_of_product, models.Product.is_active == True).all()
 
 def get_product_by_name(db: Session, name: str):
    return db.query(models.Product).filter(models.Product.name == name).first() 
@@ -325,3 +325,16 @@ def update_name_user(db: Session, user_id: int, name: str):
     db.commit()
     db.refresh(user)
     return user
+
+def change_invoiced(db: Session, entry_id: int, invoiced: bool):
+    entry = db.query(models.SalesEntry).filter(models.SalesEntry.id==entry_id).first()
+    if entry==None:
+        return None
+    entry.invoiced = invoiced
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+def get_admin_users(db: Session):
+    return db.query(models.User).filter(models.User.is_admin == True).all()

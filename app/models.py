@@ -11,7 +11,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     name = Column(String)
     hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)
     token = Column(String, default="-1")
     token_timestamp = Column(Integer , nullable=True)
     is_admin = Column(Boolean, default=False)
@@ -20,7 +20,6 @@ class User(Base):
     set_warning_for_product = Column(Integer, default=-1)
     mail_for_purchases = Column(Boolean, default=True)
     confirmation_prompt = Column(Boolean, default=True)
-    #items = relationship("Item", back_populates="owner")
 
 
 class Product(Base):

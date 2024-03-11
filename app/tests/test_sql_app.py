@@ -102,7 +102,7 @@ def test_reset_password():
     )
     assert response.status_code == 200
     data = response.json()
-    assert "[{'email': 'admin', 'id': 1, 'name': 'admin', 'is_active': True, 'is_admin': True, 'sales_period': '0', 'open_balances': 0.0}, {'email': 'string', 'id': 2, 'name': 'string', 'is_active': True, 'is_admin': False, 'sales_period': '0', 'open_balances': 0.0}]"==str(data)
+    assert "[{'email': 'admin', 'id': 1, 'name': 'admin', 'is_active': True, 'is_admin': True, 'sales_period': '0', 'open_balances': 0.0, 'token_timestamp': 1234567890}, {'email': 'string', 'id': 2, 'name': 'string', 'is_active': False, 'is_admin': False, 'sales_period': '0', 'open_balances': 0.0, 'token_timestamp': -1}]"==str(data)
     print(data)
 
 
@@ -130,7 +130,7 @@ def test_create_product():
     )
     assert response.status_code == 200
     data = response.json()
-    assert """{'name': 'string', 'price': 1.0, 'quantity': 1, 'id': 1, 'is_active': True, 'image': 'string'}"""==str(data)
+    assert """{'name': 'string', 'price': 1.0, 'quantity': 1, 'id': 1, 'is_active': True, 'image': 'string', 'type_of_product': 'product'}"""==str(data)
 
 def test_get_products():
     response = client.get(
@@ -138,11 +138,11 @@ def test_get_products():
     )
     assert response.status_code == 200
     data = response.json()
-    assert """[{'name': 'string', 'price': 1.0, 'quantity': 1, 'id': 1, 'is_active': True, 'image': 'string'}]"""==str(data)
+    assert """[{'name': 'string', 'price': 1.0, 'quantity': 1, 'id': 1, 'is_active': True, 'image': 'string', 'type_of_product': 'product'}]"""==str(data)
 
 def test_change_price():
     response = client.patch(
-        "/changeprice/?user_id=1&token=123456789&product_id=1&price=2.0",
+        "/changePrice/?user_id=1&token=123456789&product_id=1&price=2.0",
     )
     assert response.status_code == 200
     data = response.json()
@@ -154,11 +154,11 @@ def test_get_changed_products():
     )
     assert response.status_code == 200
     data = response.json()
-    assert """[{'name': 'string', 'price': 1.0, 'quantity': 1, 'id': 1, 'is_active': True, 'image': 'string'}]"""==str(data)
+    assert """[{'name': 'string', 'price': 1.0, 'quantity': 1, 'id': 1, 'is_active': True, 'image': 'string', 'type_of_product': 'product'}]"""==str(data)
 
 def test_change_price():
     response = client.patch(
-        "/changeprice/?user_id=1&token=123456789&product_id=1&price=1.0",
+        "/changePrice/?user_id=1&token=123456789&product_id=1&price=1.0",
     )
     assert response.status_code == 200
     data = response.json()
@@ -182,5 +182,6 @@ def test_get_user():
     )
     assert response.status_code == 200
     data = response.json()
-    assert "[{'email': 'admin', 'id': 1, 'name': 'admin', 'is_active': True, 'is_admin': True, 'sales_period': '0', 'open_balances': 0.0}, {'email': 'string', 'id': 2, 'name': 'string', 'is_active': True, 'is_admin': False, 'sales_period': '0', 'open_balances': 0.0}]"==str(data)
+    assert "[{'email': 'admin', 'id': 1, 'name': 'admin', 'is_active': True, 'is_admin': True, 'sales_period': '0', 'open_balances': 0.0, 'token_timestamp': 1234567890}, {'email': 'string', 'id': 2, 'name': 'string', 'is_active': False, 'is_admin': False, 'sales_period': '0', 'open_balances': 0.0, 'token_timestamp': 1234567890}]"==str(data)
+
 

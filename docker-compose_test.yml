@@ -22,6 +22,8 @@ services:
     image: postgres:15-alpine
     expose:
       - 5432
+    ports:
+      - 5432:5432
     environment:
       - POSTGRES_USER=fastapi_traefik
       - POSTGRES_PASSWORD=fastapi_traefik
@@ -38,6 +40,20 @@ services:
     volumes:
       - "./traefik.dev.toml:/etc/traefik/traefik.toml"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  adminer:
+    image: adminer
+    expose:
+      - 8080
+    ports:
+      - 8080:8080
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres_server
+    depends_on:
+      - db
+    links:
+      - db
+    networks:
+      - backend
 
 networks:
   backend:
