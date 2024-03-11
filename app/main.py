@@ -808,7 +808,7 @@ def single_checkout(user_id: int, token: str, product_id: int, db: Session = Dep
         if (old_prod_quantity-1)<=admin.set_warning_for_product and admin.set_warning_for_product!=-1 and old_prod_quantity>admin.set_warning_for_product and TESTING == "0":
                 mail.send_product_low_stock_mail(admin.email, admin.name, product.name) 
     if user.mail_for_purchases==True and TESTING == "0":
-        mail.send_buy_mail(user.user_email, user.user_name, product.name, str(f"{product.price:.2f}"))
+        mail.send_buy_mail(user.email, user.name, product.name, str(f"{product.price:.2f}"))
     return True
 
 @app.get("/products/avaiable/")
