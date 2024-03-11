@@ -85,12 +85,10 @@ def periodic():
         if today.day==1:
             test_response=client.get("/getSettings/?user_id=-1&token="+SECRET_KEY)
             data = test_response.json()
-            print(data)
             if data["auto_invoice"]==True:
                 url ="/closePeriod/?admin_id=-1&token="+SECRET_KEY
                 response = client.post(url,)
                 data = response.json()
-                print(data.status_code)
 
 def checkAuthCode(check_user: schemas.VerifyMail, db: Session = Depends(get_db), new_pw: str = None):
     for entry in temp_cred_list:
@@ -245,7 +243,6 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         generatedCode = random.randint(100000, 999999)
         print(generatedCode)
         mail.send_auth_code(user.email, generatedCode, user.name) #TODO: activate
-    print(generatedCode)
     entry = AuthCode(user=user, auth_code=generatedCode, timestamp=timestamp, change="no")
     temp_cred_list.append(entry)   
 
@@ -571,9 +568,6 @@ def set_paypal_link(user_id: int, token: str, link: str, db: Session = Depends(g
 
 @app.post("/closePeriod/")
 def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
-    print("Period closing")
-    print(admin_id)
-    print(token)
     if admin_id==-1 and token==SECRET_KEY:
         print("Period closed")
         admin = crud.get_user(db, 1)
@@ -609,7 +603,6 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
                     else:
                         for item in list_items:
                             temp_name = crud.get_product(db, entry.product_id).name
-                            print(temp_name)
                             if item.name==temp_name and item.price_per_unit==entry.price:
                                 item.quantity+=entry.quantity
                                 item.total_price+=entry.price*float(entry.quantity)
@@ -622,8 +615,7 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
                                 list_items.append(temp)
                     crud.change_invoiced(db, entry.id, True)
         
-        total_turnover = sum([i.total_price for i in list_items])
-        print(total_turnover)        
+        total_turnover = sum([i.total_price for i in list_items])       
         if last_unpaid_turnover!=0.0:
             crud.update_open_balances(db, user.id, last_unpaid_turnover)
             temp = Item()
@@ -856,7 +848,6 @@ def close_period(admin_id: int, token: str, change_id: int, db: Session = Depend
                 else:
                     for item in list_items:
                         temp_name = crud.get_product(db, entry.product_id).name
-                        print(temp_name)
                         if item.name==temp_name and item.price_per_unit==entry.price:
                             item.quantity+=entry.quantity
                             item.total_price+=entry.price*float(entry.quantity)
@@ -900,7 +891,6 @@ def close_period(admin_id: int, token: str, change_id: int, db: Session = Depend
             temp.total_price=str(f"{item.total_price:.2f}")    
             string_items.append(temp) 
         json_items = jsonable_encoder(string_items)#to be changed
-        print(json_items)
         paypal_link = crud.get_global_state_settings(db).paypal_link
         create_FastApi_Invoice(user.name, user.email, json_items, admin.name, admin.email, paypal_link, user_balance )
     crud.increase_sales_period(db, user.email)
