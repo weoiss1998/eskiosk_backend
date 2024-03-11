@@ -1,3 +1,4 @@
+import time
 from fastapi import Depends, FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -506,8 +507,12 @@ def checkout_cart(user_id: int, token: str, q: Annotated[list[schemas.ProductBuy
     #Create entry and update stock  
     string_buylist = "" 
     total = 0.00 
-    for product in q:  
-        schema_entry=schemas.SalesEntryCreate(user_id=product.user_id, product_id=product.id, price=product.price, quantity=product.quantity, period=tempPeriod, timestamp=str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S")))
+    for product in q:
+        if TESTING == "1":
+            timestamp = "123"
+        else:
+            timestamp = str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S"))
+        schema_entry=schemas.SalesEntryCreate(user_id=product.user_id, product_id=product.id, price=product.price, quantity=product.quantity, period=tempPeriod, timestamp=timestamp)
         crud.create_sales_entry(db, schema_entry)
         crud.reduce_stock(db, product_id=product.id, quantity=product.quantity)
         product_name = crud.get_product(db, product.id).name
@@ -773,13 +778,17 @@ def single_checkout(user_id: int, token: str, product_id: int, db: Session = Dep
     if product.quantity<=0:
         raise HTTPException(status_code=404, detail="Product not available")
     tempPeriod = user.sales_period
-    schema_entry=schemas.SalesEntryCreate(user_id=user_id, product_id=product.id, price=product.price, quantity=1, period=tempPeriod, timestamp=str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S")))
+    if TESTING == "1":
+        timestamp = "123"
+    else:
+        timestamp = str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S"))
+    schema_entry=schemas.SalesEntryCreate(user_id=user_id, product_id=product.id, price=product.price, quantity=1, period=tempPeriod, timestamp=timestamp)
     crud.create_sales_entry(db, schema_entry)
     crud.reduce_stock(db, product_id=product.id, quantity=product.quantity-1)
     for admin in admins:
         if (old_prod_quantity-1)<=admin.set_warning_for_product and admin.set_warning_for_product!=-1 and old_prod_quantity>admin.set_warning_for_product and TESTING == "0":
                 mail.send_product_low_stock_mail(admin.email, admin.name, product.name) 
-    if user.user_wants_email==True and TESTING == "0":
+    if user.mail_for_purchases==True and TESTING == "0":
         mail.send_buy_mail(user.user_email, user.user_name, product.name, str(f"{product.price:.2f}"))
     return True
 
