@@ -1,32 +1,40 @@
-# Dockerizing FastAPI with Postgres, Uvicorn, and Traefik
+Generell wird empfohlen, diese Container nur in einer Linux Umgebung auszuführen.
+Bei Windows kann es passieren, dass die Container nicht richtig starten!
 
-## Want to learn how to build this?
+In der .env Datei muss die REACT_APP_API_URL genauso wie im Frontend gesetzt sein!
+Bei den SMTP Ports müssen alle Daten ausgefüllt werden.
+TOKEN_EXPIRY_MINUTES gibt an, wie lange ein Token während einer Session maximal gültig ist.
+AUTH_CODE_EXPIRY_MINUTES gibt an, wie lange ein Authentifizierungscode während des Registrier- und Passwordzurücksetzprozess gültig ist.
+Der SECRET-KEY gibt den Bypass zum Token für den Cronjob an, bitte modifzieren!
 
-Check out the [post](https://testdriven.io/blog/fastapi-docker-traefik/).
-
-## Want to use this project?
-
-### Development
-
-Build the images and spin up the containers:
-
+Auf der Ebene von dem app-Ordner folgende Befehle ausführen:
 ```sh
-$ docker-compose up -d --build
+$ docker compose build
 ```
-Clear Database
-docker compose down --volumes
 
-Test it out:
-
-1. [http://fastapi.localhost:8008/](http://fastapi.localhost:8008/)
-1. [http://fastapi.localhost:8081/](http://fastapi.localhost:8081/)
-
-### Production
-
-Update the domain in *docker-compose.prod.yml*, and add your email to *traefik.prod.toml*.
-
-Build the images and run the containers:
-
+und danach:
 ```sh
-$ docker-compose -f docker-compose.prod.yml up -d --build
+docker compose up
 ```
+Standardmäßig sind die API unter folgender Adresse zu finden: [http://fastapi.localhost:8008/docs](http://fastapi.localhost:8008/docs).
+
+Um die Test durchzuführen, muss zuerst folgendes asugeführt werden:
+docker compose down 
+Danach folgender Befehl:
+```sh
+docker compose -f docker-compose_test.yml build
+docker compose -f docker-compose_test.yml up
+```
+In einem anderem Tab kann folgender Befehl dann ausgeführt werden.
+```sh
+docker compose exec web pytest
+```
+Die Tests können nur einmal gestartet werden, beim zweiten Durchlauf schlagen sie automatisch fehl.
+Um sie neu durchzuführen, muss Folgendes ausgeführt werden:
+```sh
+docker compose -f docker-compose_test.yml down
+docker compose -f docker-compose_test.yml up
+```
+Und schließlich können die Tests neu durchgeführt werden.
+
+Als Basis diente: [https://github.com/ed-roh/react-admin-dashboard](https://github.com/ed-roh/react-admin-dashboard)
