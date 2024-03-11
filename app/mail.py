@@ -28,7 +28,7 @@ codeTemplate = "Hello {CONTACT_NAME},\nThis is your verification code: {CODE}.\n
 resetCodeTemplate = "Hello {CONTACT_NAME},\nThis is your password reset code: {CODE}.\nBest regards"
 buyTemplate = "Hello {CONTACT_NAME},\nYou have purchased {PRODUCT_NAME} with a total sum of {TOTAL_SUM}€.\nBest regards"
 adminActivationTemplate = "Hello {CONTACT_NAME},\nA new user has registered with the name {NAME} and would like to be activated.\nBest regards"
-accountingTemplate = "Hello {CONTACT_NAME},\nYou have a balance of {BALANCE}.\n You can find attached the actual invoice. \nBest regards"
+accountingTemplate = "Hello {CONTACT_NAME},\nYou have a balance of {BALANCE}€.\n You can find attached the actual invoice. \nBest regards"
 productLowStockTemplate = "Hello {CONTACT_NAME},\nThe product {PRODUCT_NAME} is low in stock. \nBest regards"
 
 
