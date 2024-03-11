@@ -41,7 +41,7 @@ origins = [
 
 TESTING = os.environ.get("TESTING", 0)
 
-secret_key = os.environ.get("SECRET_KEY", "1234567890")
+SECRET_KEY = os.environ.get("SECRET_KEY", "1234567890")
 
 temp_cred_list = list()
 
@@ -78,14 +78,19 @@ class AuthCode(BaseModel):
 client = TestClient(app)
 
 @app.on_event("startup")
-@repeat_every(seconds=10, wait_first=True)
+@repeat_every(seconds=86390, wait_first=True)
 def periodic():
     if TESTING == "0":
         today = datetime.today()
-        if today.day==11:
-            response = client.post("/closePeriod/", json={"admin_id": -1, "token": secret_key})
-            data = response.json()
-            print(data.status_code)
+        if today.day==1:
+            test_response=client.get("/getSettings/?user_id=-1&token="+SECRET_KEY)
+            data = test_response.json()
+            print(data)
+            if data["auto_invoice"]==True:
+                url ="/closePeriod/?admin_id=-1&token="+SECRET_KEY
+                response = client.post(url,)
+                data = response.json()
+                print(data.status_code)
 
 def checkAuthCode(check_user: schemas.VerifyMail, db: Session = Depends(get_db), new_pw: str = None):
     for entry in temp_cred_list:
@@ -566,11 +571,15 @@ def set_paypal_link(user_id: int, token: str, link: str, db: Session = Depends(g
 
 @app.post("/closePeriod/")
 def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
-    if admin_id==-1 and token==secret_key:
+    print("Period closing")
+    print(admin_id)
+    print(token)
+    if admin_id==-1 and token==SECRET_KEY:
         print("Period closed")
     else:
         admin = crud.get_user(db, admin_id)
         checkIfAdmin(db, admin_id, token)
+    admin = crud.get_user(db, 1)
     users = crud.get_users(db, skip=0, limit=1024)
     sales_entries = crud.get_sales_entries(db, skip=0, limit=1024)
     class Item():
@@ -689,8 +698,12 @@ def add_open_balances(user_id: int, token: str, change_id:int, amount: float, db
 
 @app.get("/getSettings/")
 def get_settings(user_id: int, token: str, db: Session = Depends(get_db)):
-    checkIfAuthentificated(db, user_id, token)
-    db_user=crud.get_user(db, user_id)
+    if user_id==-1 and token==SECRET_KEY:
+        db_user=crud.get_user(db, 1)
+        print("check_for_admin_user")
+    else:
+        checkIfAuthentificated(db, user_id, token)
+        db_user=crud.get_user(db, user_id)
     if db_user.is_admin==True:
         admin_settings = crud.get_global_state_settings(db)
         if admin_settings.paypal_link==None:
