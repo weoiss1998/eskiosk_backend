@@ -617,7 +617,7 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
         
         total_turnover = sum([i.total_price for i in list_items])       
         if last_unpaid_turnover!=0.0:
-            crud.update_open_balances(db, user.id, last_unpaid_turnover)
+            crud.update_open_balances(db, user.id, round(last_unpaid_turnover,2))
             temp = Item()
             temp.name="Open Balances"
             temp.price_per_unit=0.00
@@ -629,7 +629,7 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
             for entry in sales_entries:
                 if entry.user_id==user.id and entry.paid==False and entry.invoiced==True:
                     crud.change_paid(db, entry.id, True)
-            crud.update_open_balances(db, user.id, user_balance)
+            crud.update_open_balances(db, user.id, round(user_balance,2))
 
         class StringItem():
             name: str
@@ -873,7 +873,7 @@ def close_period(admin_id: int, token: str, change_id: int, db: Session = Depend
     
     total_turnover = sum([i.total_price for i in list_items])   
     if last_unpaid_turnover!=0.0: 
-        crud.update_open_balances(db, user.id, last_unpaid_turnover)
+        crud.update_open_balances(db, user.id, round(last_unpaid_turnover,2))
         temp = Item()
         temp.name="Open Balances"
         temp.price_per_unit=0.00
@@ -885,7 +885,7 @@ def close_period(admin_id: int, token: str, change_id: int, db: Session = Depend
         for entry in sales_entries:
             if entry.user_id==user.id and entry.paid==False and entry.invoiced==True:
                 crud.change_paid(db, entry.id, True)
-        crud.update_open_balances(db, user.id, user_balance)
+        crud.update_open_balances(db, user.id, round(user_balance,2))
 
     class StringItem():
             name: str
