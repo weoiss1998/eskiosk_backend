@@ -675,6 +675,11 @@ def send_money(user_id: int, token:str, email:str, amount: float, db: Session = 
     crud.update_open_balances(db, user_id, old_amount+amount)
     old_amount= crud.get_open_balances(db, empf.id)
     crud.update_open_balances(db, empf.id, old_amount-amount)
+    if old_amount-amount<=0.0:
+        sales_entries = crud.get_sales_entry_by_user_id(db, empf.id)
+        for entry in sales_entries:
+            if entry.paid==False and entry.invoiced==True:
+                crud.change_paid(db, entry.id, True)
     return True
 
 @app.post("/addOpenBalances/")
@@ -684,7 +689,13 @@ def add_open_balances(user_id: int, token: str, change_id:int, amount: float, db
     if user==None:
         raise HTTPException(status_code=404, detail="User not found")
     old_amount= crud.get_open_balances(db, change_id)
-    crud.update_open_balances(db, change_id, old_amount-amount)
+    new_amount= old_amount-amount
+    crud.update_open_balances(db, change_id, new_amount)
+    if new_amount<=0.0:
+        sales_entries = crud.get_sales_entry_by_user_id(db, change_id)
+        for entry in sales_entries:
+            if entry.paid==False and entry.invoiced==True:
+                crud.change_paid(db, entry.id, True)
     return True
 
 @app.get("/getSettings/")
