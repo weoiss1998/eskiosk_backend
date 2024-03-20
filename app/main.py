@@ -541,23 +541,16 @@ def get_user_data(user_id: int, token: str, db: Session = Depends(get_db)):
     user_data = list()
     for user in users:
         open_balances = crud.get_open_balances(db, user.id)
-        last_turnover = open_balances
         actual_turnover = 0.0 
         period = int(user.sales_period)
         paid = False
         for entry in sales_entries:
             if entry.user_id==user.id:
-                if int(entry.period)==period-1:
-                    last_turnover+=entry.price*float(entry.quantity)
-                    if entry.paid==True and open_balances==0.0:
-                        paid=True
-                    else:
-                        paid=False
                 if int(entry.period)==period:
                     actual_turnover+=entry.price*float(entry.quantity)
-        if last_turnover<=0.0:
+        if user.open_balances<=0.00:
             paid=True
-        user_data.append(schemas.UserData(id=user.id, email=user.email, is_active=user.is_active, is_admin=user.is_admin, sales_period=user.sales_period, name=user.name, last_turnover=last_turnover, paid=paid, actual_turnover=actual_turnover, open_balances=user.open_balances))
+        user_data.append(schemas.UserData(id=user.id, email=user.email, is_active=user.is_active, is_admin=user.is_admin, sales_period=user.sales_period, name=user.name, last_turnover=user.open_balances, paid=paid, actual_turnover=actual_turnover, open_balances=user.open_balances))
     return user_data
 
 @app.patch("/changePayPalLink/")
@@ -588,10 +581,6 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
         period = int(user.sales_period)
         for entry in sales_entries:
             if entry.user_id==user.id:
-                if int(entry.period)==period-1 and entry.paid==False:
-                    last_unpaid_turnover+=entry.price*float(entry.quantity)
-                    """entry.paid=True
-                    crud.change_paid(db, entry.id, True)"""
                 if entry.invoiced==False:
                     if len(list_items)==0:
                         temp = Item()
@@ -629,7 +618,7 @@ def close_period(admin_id: int, token: str, db: Session = Depends(get_db)) :
             for entry in sales_entries:
                 if entry.user_id==user.id and entry.paid==False and entry.invoiced==True:
                     crud.change_paid(db, entry.id, True)
-            crud.update_open_balances(db, user.id, round(user_balance,2))
+        crud.update_open_balances(db, user.id, round(user_balance,2))
 
         class StringItem():
             name: str
@@ -846,8 +835,6 @@ def close_period(admin_id: int, token: str, change_id: int, db: Session = Depend
     period = int(user.sales_period)
     for entry in sales_entries:
         if entry.user_id==user.id:
-            if int(entry.period)==period-1 and entry.paid==False:
-                last_unpaid_turnover+=entry.price*float(entry.quantity)
             if entry.invoiced==False:
                 if len(list_items)==0:
                     temp = Item()
@@ -885,7 +872,7 @@ def close_period(admin_id: int, token: str, change_id: int, db: Session = Depend
         for entry in sales_entries:
             if entry.user_id==user.id and entry.paid==False and entry.invoiced==True:
                 crud.change_paid(db, entry.id, True)
-        crud.update_open_balances(db, user.id, round(user_balance,2))
+    crud.update_open_balances(db, user.id, round(user_balance,2))
 
     class StringItem():
             name: str
