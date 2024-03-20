@@ -94,10 +94,10 @@ def get_products(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Product).offset(skip).limit(limit).all()
 
 def get_active_products(db: Session):
-    return db.query(models.Product).filter(models.Product.is_active == True).all()
+    return db.query(models.Product).filter(models.Product.is_active == True, models.Product.quantity>0).all()
 
 def get_one_sort(db: Session, type_of_product: str):
-    return db.query(models.Product).filter(models.Product.type_of_product == type_of_product, models.Product.is_active == True).all()
+    return db.query(models.Product).filter(models.Product.type_of_product == type_of_product, models.Product.is_active == True, models.Product.quantity>0).all()
 
 def get_product_by_name(db: Session, name: str):
    return db.query(models.Product).filter(models.Product.name == name).first() 

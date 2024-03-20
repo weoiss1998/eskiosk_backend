@@ -806,7 +806,7 @@ def single_checkout(user_id: int, token: str, product_id: int, db: Session = Dep
         timestamp = str(datetime.now(pytz.timezone('Europe/Berlin')).strftime("%Y-%m-%d %H:%M:%S"))
     schema_entry=schemas.SalesEntryCreate(user_id=user_id, product_id=product.id, price=product.price, quantity=1, period=tempPeriod, timestamp=timestamp)
     crud.create_sales_entry(db, schema_entry)
-    crud.reduce_stock(db, product_id=product.id, quantity=product.quantity-1)
+    crud.reduce_stock(db, product_id=product.id, quantity=1)
     for admin in admins:
         if (old_prod_quantity-1)<=admin.set_warning_for_product and admin.set_warning_for_product!=-1 and old_prod_quantity>admin.set_warning_for_product and TESTING == "0":
                 mail.send_product_low_stock_mail(admin.email, admin.name, product.name) 
